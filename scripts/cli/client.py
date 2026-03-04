@@ -4,7 +4,7 @@ MCPClient - Communication avec le serveur MCP Memory.
 
 Deux modes de communication :
   - REST : pour les endpoints simples (health, list, graph)
-  - SSE/MCP : pour appeler les outils MCP (ingest, delete, search...)
+  - Streamable HTTP/MCP : pour appeler les outils MCP (ingest, delete, search...)
 
 Gestion des erreurs de connexion :
   - Si le serveur est injoignable, lève ServerNotRunningError
@@ -73,13 +73,13 @@ class MCPClient:
     async def call_tool(self, tool_name: str, args: dict, max_retries: int = 2,
                         on_progress=None) -> dict:
         """
-        Appeler un outil MCP via le protocole SSE.
+        Appeler un outil MCP via Streamable HTTP.
 
         Lève ServerNotRunningError si le serveur est injoignable.
-        Les erreurs de connexion SSE sont souvent wrappées dans un
+        Les erreurs de connexion sont souvent wrappées dans un
         ExceptionGroup/TaskGroup, d'où le parsing récursif.
         
-        Retry automatique en cas de déconnexion SSE (RemoteProtocolError,
+        Retry automatique en cas de déconnexion transport (RemoteProtocolError,
         ClosedResourceError) — fréquent pour les opérations longues (ingestion).
         
         Args:
@@ -93,20 +93,19 @@ class MCPClient:
         import asyncio
         import sys
         from mcp import ClientSession
-        from mcp.client.sse import sse_client
+        from mcp.client.streamable_http import streamablehttp_client
 
         headers = {"Authorization": f"Bearer {self.token}"}
 
         last_error = None
         for attempt in range(1, max_retries + 1):
             try:
-                # sse_read_timeout élevé pour les opérations longues (ingestion LLM)
-                async with sse_client(
-                    f"{self.base_url}/sse",
+                async with streamablehttp_client(
+                    f"{self.base_url}/mcp",
                     headers=headers,
-                    timeout=30,              # connexion initiale : 30s (augmenté)
+                    timeout=30,              # connexion initiale : 30s
                     sse_read_timeout=900     # attente réponse : 15 min (extraction LLM de gros docs)
-                ) as (read, write):
+                ) as (read, write, _):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         
@@ -162,11 +161,11 @@ class MCPClient:
                 # Vérifier si c'est une erreur de connexion (serveur down)
                 if self._is_connection_error(e):
                     raise ServerNotRunningError(self.base_url)
-                # Vérifier si c'est une erreur SSE récupérable (déconnexion mid-stream)
-                if self._is_sse_disconnect(e) and attempt < max_retries:
+                # Vérifier si c'est une erreur transport récupérable (déconnexion mid-stream)
+                if self._is_transport_disconnect(e) and attempt < max_retries:
                     last_error = e
                     wait_time = attempt * 5  # 5s, 10s, 15s...
-                    print(f"⚠️  Connexion SSE perdue (tentative {attempt}/{max_retries}), "
+                    print(f"⚠️  Connexion perdue (tentative {attempt}/{max_retries}), "
                           f"retry dans {wait_time}s...", file=sys.stderr)
                     await asyncio.sleep(wait_time)
                     continue
@@ -175,9 +174,8 @@ class MCPClient:
                 if detail and detail != str(e):
                     raise RuntimeError(
                         f"{detail}\n\n"
-                        f"💡 Si le serveur est derrière un reverse proxy, vérifiez que "
-                        f"le HostNormalizerMiddleware est actif (HTTP 421 = Host header rejeté).\n"
-                        f"   URL: {self.base_url}/sse"
+                        f"💡 Vérifiez que le serveur MCP est accessible.\n"
+                        f"   URL: {self.base_url}/mcp"
                     ) from None
                 raise
 
@@ -185,9 +183,9 @@ class MCPClient:
         raise last_error or Exception("Échec après toutes les tentatives de retry")
 
     @staticmethod
-    def _is_sse_disconnect(exc: BaseException) -> bool:
+    def _is_transport_disconnect(exc: BaseException) -> bool:
         """
-        Vérifie si une exception est une déconnexion SSE récupérable.
+        Vérifie si une exception est une déconnexion transport récupérable.
         
         Ces erreurs surviennent quand la connexion HTTP est coupée pendant
         une opération longue (ex: ingestion LLM de 5+ minutes).
@@ -215,11 +213,11 @@ class MCPClient:
         # Parcourir les sous-exceptions d'un ExceptionGroup
         if hasattr(exc, 'exceptions'):
             for sub in exc.exceptions:
-                if MCPClient._is_sse_disconnect(sub):
+                if MCPClient._is_transport_disconnect(sub):
                     return True
         
         # Vérifier __cause__ (chainage d'exceptions)
-        if exc.__cause__ and MCPClient._is_sse_disconnect(exc.__cause__):
+        if exc.__cause__ and MCPClient._is_transport_disconnect(exc.__cause__):
             return True
         
         return False

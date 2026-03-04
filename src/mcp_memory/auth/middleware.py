@@ -13,53 +13,9 @@ from ..config import get_settings
 from .context import current_auth
 
 
-class HostNormalizerMiddleware:
-    """
-    Middleware ASGI qui normalise le Host header pour compatibilité reverse proxy.
-    
-    Problème : quand le serveur MCP est derrière un reverse proxy (nginx → Caddy → MCP),
-    le Host header contient le nom de domaine public (ex: "graph-mem.mcp.cloud-temple.app")
-    mais le MCP SDK / Starlette attend "localhost:8002" et rejette avec HTTP 421
-    "Invalid Host header" (TrustedHost validation).
-    
-    Solution : ce middleware remplace le Host header par l'adresse locale du serveur
-    AVANT que la requête n'atteigne le MCP SSE app. Les routes custom (API REST,
-    fichiers statiques) sont interceptées avant par StaticFilesMiddleware et ne sont
-    pas affectées.
-    
-    Ce middleware doit être placé entre StaticFilesMiddleware et mcp.sse_app() dans
-    la pile de middlewares.
-    """
-    
-    def __init__(self, app, local_host: str = "localhost"):
-        """
-        Args:
-            app: Application ASGI à wrapper (typiquement mcp.sse_app())
-            local_host: Valeur de remplacement pour le Host header
-        """
-        self.app = app
-        self.local_host = local_host.encode("utf-8")
-    
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            # Remplacer le Host header par l'adresse locale
-            # Cela permet au MCP SDK / Starlette d'accepter la requête
-            headers = list(scope.get("headers", []))
-            new_headers = []
-            original_host = None
-            for key, value in headers:
-                if key == b"host":
-                    original_host = value.decode("utf-8", errors="replace")
-                    new_headers.append((b"host", self.local_host))
-                else:
-                    new_headers.append((key, value))
-            scope = dict(scope, headers=new_headers)
-            
-            if original_host and original_host != self.local_host.decode():
-                path = scope.get("path", "")
-                print(f"🔀 [Host] {path}: {original_host} → {self.local_host.decode()}", file=sys.stderr)
-        
-        await self.app(scope, receive, send)
+# NOTE: HostNormalizerMiddleware supprimé (migration SSE → Streamable HTTP).
+# L'ancien transport SSE nécessitait une normalisation du Host header pour les reverse
+# proxies (HTTP 421). Streamable HTTP n'a plus ce problème.
 
 
 class AuthMiddleware:
@@ -337,10 +293,26 @@ class StaticFilesMiddleware:
                 break
         return body
     
+    def _read_version(self) -> str:
+        """Lit la version depuis le fichier VERSION."""
+        try:
+            # auth/middleware.py → auth → mcp_memory → src → project root
+            version_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+                "VERSION"
+            )
+            if os.path.exists(version_path):
+                with open(version_path) as f:
+                    return f.read().strip()
+        except Exception:
+            pass
+        return "unknown"
+
     async def _api_health(self, send):
         """Retourne l'état de santé du serveur."""
         import json
         from datetime import datetime
+        version = self._read_version()
         try:
             # Test rapide Neo4j via une requête simple
             neo4j_ok = False
@@ -354,7 +326,7 @@ class StaticFilesMiddleware:
             
             data = {
                 "status": "healthy" if neo4j_ok else "degraded",
-                "version": "1.1.0",
+                "version": version,
                 "timestamp": datetime.utcnow().isoformat(),
                 "services": {
                     "neo4j": {"status": "ok" if neo4j_ok else "error", "message": neo4j_msg}
@@ -364,7 +336,7 @@ class StaticFilesMiddleware:
         except Exception as e:
             await self._send_json(send, {
                 "status": "error",
-                "version": "1.1.0",
+                "version": version,
                 "message": str(e)
             }, 500)
     

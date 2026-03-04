@@ -2,6 +2,18 @@
 
 ## Ce qui fonctionne ✅
 
+### Migration Streamable HTTP (branche dev/streamable-http — 2026-04-03)
+- **Transport MCP** : SSE → Streamable HTTP (`mcp.streamable_http_app()`, endpoint `/mcp`)
+- **Client CLI** : `streamablehttp_client` (SDK MCP ≥1.8.0)
+- **WAF** : route unique `/mcp*` (remplace `/sse*` + `/messages/*`)
+- **Rate limiting** : 200 req/min MCP, 500 global (×3 car Streamable HTTP = 3 req/appel)
+- **HostNormalizerMiddleware** supprimé (plus nécessaire)
+- **Dockerfile** : `COPY VERSION .` + healthcheck `/health`
+- **/health** : version lue dynamiquement depuis fichier `VERSION` (pas hardcodée)
+- **README.en.md** : version anglaise du README
+- **Test de qualification** : `scripts/test_streamable_http.py` — 27/27 PASS, 10.4s
+- **Guide de migration** : `DESIGN/MIGRATION_STREAMABLE_HTTP.md` (pour Live Memory)
+
 ### Infrastructure
 - Serveur MCP via HTTP/SSE (FastMCP + uvicorn)
 - Docker Compose (WAF + MCP + Neo4j + Qdrant)

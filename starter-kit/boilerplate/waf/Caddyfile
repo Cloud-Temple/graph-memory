@@ -6,7 +6,7 @@
 # 1. Coraza WAF avec OWASP CRS (protection OWASP Top 10)
 # 2. Reverse proxy vers le service MCP (port 8002)
 # 3. Headers de sécurité (CSP, HSTS, X-Frame-Options, etc.)
-# 4. Gestion SSE (Server-Sent Events) pour le protocole MCP
+# 4. Gestion Streamable HTTP pour le protocole MCP (endpoint /mcp)
 # 5. Rate limiting par IP
 # 6. TLS automatique via Let's Encrypt (si domaine configuré)
 #
@@ -14,14 +14,13 @@
 #
 # ARCHITECTURE DES ROUTES :
 #
-#   /sse*        → Reverse Proxy DIRECT (streaming SSE, pas de WAF)
-#   /messages/*  → Reverse Proxy DIRECT (MCP protocol, pas de WAF)
+#   /mcp         → Reverse Proxy DIRECT (Streamable HTTP, pas de WAF)
 #   /api/*       → WAF Coraza + Reverse Proxy (timeout 5min pour outils longs)
 #   /*           → WAF Coraza + Reverse Proxy (statiques, health, etc.)
 #
-# Les routes SSE et messages sont authentifiées par token MCP côté serveur.
+# La route /mcp est authentifiée par token MCP côté serveur.
 # Le WAF Coraza bufférise les réponses pour les inspecter, ce qui est
-# incompatible avec le streaming SSE (connexions longues, flux continu).
+# incompatible avec le streaming SSE optionnel de Streamable HTTP.
 #
 # =============================================================================
 #
@@ -71,25 +70,16 @@
 	# Rate Limiting par IP (appliqué AVANT le WAF)
 	# =========================================================================
 	# Limites calibrées pour des agents IA :
-	# - SSE : 10 nouvelles connexions/min (1 connexion dure des heures)
-	# - Messages MCP : 60 appels d'outils/min (burst d'un agent actif)
+	# - MCP : 60 appels/min (sessions + outils, burst d'un agent actif)
 	# - API REST : 30 requêtes/min (interface web)
 	# - Global : 200 requêtes/min (toutes routes confondues)
 	#
 	# Adapter ces limites selon votre cas d'usage.
 	# =========================================================================
 	rate_limit {
-		zone sse {
+		zone mcp {
 			match {
-				path /sse*
-			}
-			key {remote_host}
-			events 10
-			window 1m
-		}
-		zone messages {
-			match {
-				path /messages/*
+				path /mcp*
 			}
 			key {remote_host}
 			events 60
@@ -111,33 +101,18 @@
 	}
 
 	# =========================================================================
-	# Route 1 : SSE (Server-Sent Events) — SANS WAF
+	# Route 1 : MCP Streamable HTTP — SANS WAF
 	# =========================================================================
-	# Le protocole MCP utilise SSE pour la communication bidirectionnelle.
-	# Les connexions restent ouvertes pendant toute la session.
-	# Coraza bufférise les réponses → incompatible avec le streaming SSE.
-	# =========================================================================
-	handle /sse* {
-		# ⚠️ Adapter "mon-mcp" au nom de votre service dans docker-compose.yml
-		reverse_proxy mon-mcp:8002 {
-			flush_interval -1
-			transport http {
-				read_timeout 0
-				write_timeout 0
-				response_header_timeout 0
-			}
-		}
-	}
-
-	# =========================================================================
-	# Route 2 : Messages MCP — SANS WAF
-	# =========================================================================
-	# POST /messages/{session_id} — appels d'outils MCP
+	# Le protocole MCP utilise Streamable HTTP (POST /mcp + GET /mcp).
+	# Les réponses peuvent inclure du SSE optionnel (streaming server→client).
+	# Coraza bufférise les réponses → incompatible avec le streaming.
 	# Le body JSON peut contenir du base64 volumineux → faux positifs CRS.
 	# Certains outils peuvent prendre plusieurs minutes.
 	# =========================================================================
-	handle /messages/* {
+	handle /mcp* {
+		# ⚠️ Adapter "mon-mcp" au nom de votre service dans docker-compose.yml
 		reverse_proxy mon-mcp:8002 {
+			flush_interval -1
 			transport http {
 				read_timeout 1800s
 				write_timeout 1800s
@@ -147,7 +122,7 @@
 	}
 
 	# =========================================================================
-	# Route 3 : Tout le reste — AVEC WAF Coraza
+	# Route 2 : Tout le reste — AVEC WAF Coraza
 	# =========================================================================
 	# Protégé par OWASP CRS contre : injections SQL/NoSQL, XSS, LFI/RFI,
 	# SSRF, path traversal, scanner/bot detection.

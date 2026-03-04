@@ -2,7 +2,7 @@
 """
 MCP Memory Server - Serveur principal.
 
-Expose tous les outils MCP via HTTP/SSE avec FastMCP.
+Expose tous les outils MCP via Streamable HTTP avec FastMCP.
 """
 
 import os
@@ -22,7 +22,7 @@ load_dotenv()
 from mcp.server.fastmcp import FastMCP, Context
 
 from .config import get_settings
-from .auth.middleware import AuthMiddleware, LoggingMiddleware, StaticFilesMiddleware, HostNormalizerMiddleware
+from .auth.middleware import AuthMiddleware, LoggingMiddleware, StaticFilesMiddleware
 from .auth.context import check_memory_access, check_write_permission, current_auth
 
 
@@ -33,11 +33,7 @@ from .auth.context import check_memory_access, check_write_permission, current_a
 settings = get_settings()
 
 # Créer l'instance FastMCP
-# IMPORTANT: host="0.0.0.0" évite l'activation automatique de la protection
-# DNS rebinding du SDK MCP v1.26+ qui n'autorise que localhost par défaut.
-# Sans cela, les requêtes avec Host: graph-mem.mcp.cloud-temple.app sont
-# rejetées avec un 421 Misdirected Request derrière un reverse proxy.
-# Ref: mcp/server/fastmcp/server.py ligne 166 + mcp/server/transport_security.py
+# host="0.0.0.0" pour accepter les connexions externes (reverse proxy, Docker)
 mcp = FastMCP(
     name=settings.mcp_server_name,
     host=settings.mcp_server_host,
@@ -2280,27 +2276,22 @@ def main():
     parser.add_argument("--debug", action="store_true", default=settings.mcp_server_debug)
     args = parser.parse_args()
     
-    # Récupérer l'app ASGI de FastMCP
-    base_app = mcp.sse_app()
+    # Récupérer l'app ASGI Streamable HTTP de FastMCP
+    # Remplace l'ancien mcp.sse_app() — endpoint unique /mcp au lieu de /sse + /messages
+    # Le HostNormalizerMiddleware n'est plus nécessaire (plus de validation Host par Starlette)
+    base_app = mcp.streamable_http_app()
     
     # Empiler les middlewares (le dernier wrappé est le premier exécuté)
-    # Flux requête : AuthMiddleware → LoggingMiddleware → StaticFilesMiddleware
-    #                → HostNormalizerMiddleware → MCP SSE app
-    #
-    # HostNormalizerMiddleware : normalise le Host header pour que le MCP SDK
-    # (Starlette) accepte les requêtes provenant de reverse proxies (nginx, Caddy)
-    # qui transmettent le Host public (ex: "graph-mem.mcp.cloud-temple.app")
-    # au lieu de "localhost:8002". Sans ce middleware, /sse et /messages
-    # retournent HTTP 421 "Invalid Host header".
-    app = HostNormalizerMiddleware(base_app)
-    app = StaticFilesMiddleware(app)
+    # Flux requête : AuthMiddleware → LoggingMiddleware → StaticFilesMiddleware → MCP Streamable HTTP app
+    app = StaticFilesMiddleware(base_app)
     app = LoggingMiddleware(app, debug=args.debug)
     app = AuthMiddleware(app, debug=args.debug)
     
     # Afficher le banner
     print("=" * 70, file=sys.stderr)
-    print("🧠 MCP Memory Server - Démarrage", file=sys.stderr)
+    print("🧠 MCP Memory Server - Démarrage (Streamable HTTP)", file=sys.stderr)
     print(f"📡 Écoute sur http://{args.host}:{args.port}", file=sys.stderr)
+    print(f"🔗 MCP     : http://{args.host}:{args.port}/mcp", file=sys.stderr)
     print(f"🔒 Auth     : Bearer Token (ou ADMIN_BOOTSTRAP_KEY)", file=sys.stderr)
     print(f"🐛 Debug    : {'ACTIVÉ' if args.debug else 'Désactivé'}", file=sys.stderr)
     print("=" * 70, file=sys.stderr)

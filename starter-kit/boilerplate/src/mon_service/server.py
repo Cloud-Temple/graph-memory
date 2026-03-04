@@ -150,15 +150,14 @@ def create_app():
     Crée l'application ASGI complète avec les middlewares.
 
     Pile d'exécution :
-        AuthMiddleware → LoggingMiddleware → HostNormalizerMiddleware → mcp.sse_app()
+        AuthMiddleware → LoggingMiddleware → mcp.streamable_http_app()
     """
-    from .auth.middleware import AuthMiddleware, LoggingMiddleware, HostNormalizerMiddleware
+    from .auth.middleware import AuthMiddleware, LoggingMiddleware
 
-    # L'app de base est le SSE handler du SDK MCP
-    app = mcp.sse_app()
+    # L'app de base est le Streamable HTTP handler du SDK MCP
+    app = mcp.streamable_http_app()
 
     # Empiler les middlewares (dernier ajouté = premier exécuté)
-    app = HostNormalizerMiddleware(app)
     app = LoggingMiddleware(app)
     app = AuthMiddleware(app)
 
@@ -183,7 +182,7 @@ def main():
 ║    - system_about                            ║
 ║                                              ║
 ║  🌐 Serveur : http://{settings.mcp_server_host}:{settings.mcp_server_port:<5d}             ║
-║  📡 SSE     : http://{settings.mcp_server_host}:{settings.mcp_server_port:<5d}/sse          ║
+║  🔗 MCP     : http://{settings.mcp_server_host}:{settings.mcp_server_port:<5d}/mcp          ║
 ║                                              ║
 ╚══════════════════════════════════════════════╝
 """, file=sys.stderr)

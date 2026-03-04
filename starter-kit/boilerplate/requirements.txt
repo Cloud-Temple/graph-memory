@@ -1,5 +1,5 @@
-# === Framework MCP ===
-mcp[cli]>=1.2.0
+# === Framework MCP (Streamable HTTP) ===
+mcp[cli]>=1.8.0
 uvicorn>=0.32.0
 
 # === Configuration ===
@@ -11,9 +11,8 @@ click>=8.1
 rich>=13.0
 prompt-toolkit>=3.0
 
-# === Client HTTP/SSE ===
+# === Client HTTP ===
 httpx>=0.27
-httpx-sse>=0.4
 
 # === Ajouter vos dépendances métier ici ===
 # psycopg2-binary>=2.9     # PostgreSQL

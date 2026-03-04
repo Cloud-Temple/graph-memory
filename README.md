@@ -1,5 +1,7 @@
 # 🧠 Graph Memory — MCP Knowledge Graph Service
 
+
+> 🇬🇧 [English version](README.en.md)
 Service de mémoire persistante basé sur un **graphe de connaissances** pour les agents IA, implémenté avec le protocole [MCP (Model Context Protocol)](https://modelcontextprotocol.io/).
 
 Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
@@ -65,6 +67,17 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 ## 📋 Changelog
 
 > Historique complet : voir [CHANGELOG.md](CHANGELOG.md)
+
+### v1.4.0 — 3 avril 2026 — 🔄 Migration SSE → Streamable HTTP
+- 🔄 **Migration complète SSE → Streamable HTTP** — Endpoint unique `/mcp` remplaçant `/sse` + `/messages`. `mcp>=1.8.0` requis.
+- 🔧 **WAF mis à jour** — Route unique `/mcp*`, rate limiting ajusté (200 req/min MCP, 500 global)
+- 🐳 **Dockerfile corrigé** — `COPY VERSION .`, healthcheck sur `/health`
+- 🧪 **Test end-to-end officiel** — `scripts/test_service.py` — 27 tests, 9 catégories, nettoyage auto
+- 📖 **Guide de migration** — `DESIGN/MIGRATION_STREAMABLE_HTTP.md`
+- ❌ **`HostNormalizerMiddleware` supprimé** — Plus nécessaire avec Streamable HTTP
+
+### v1.3.7 — 19 février 2026 — 🧠 Ontologie general.yaml v1.1
+- 🧠 **general.yaml v1.1** — +4 entités (LegalProvision, Sector, Sanction, Stakeholder), +2 relations (APPLIES_TO, IMPOSES), ~50 lignes `special_instructions` anti-"Other" pour REFERENTIEL
 
 ### v1.3.6 — 18 février 2026 — 🧠 Qualité ontologies + Ontologie general + CLI Répertoire
 - 📚 **Nouvelle ontologie `general` v1.0** — 24 entités / 22 relations, filet de sécurité universel pour FAQ, certifications, RSE, specs produits, knowledge bases
@@ -235,7 +248,7 @@ Question en langage naturel
 │                         Clients MCP                                  │
 │   (Claude Desktop, Cline, QuoteFlow, Vela, CLI, Interface Web)       │
 └──────────────────────────────┬───────────────────────────────────────┘
-                               │ HTTP/SSE + Bearer Token
+                               │ Streamable HTTP + Bearer Token
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │              Coraza WAF (Port 8080 — seul port exposé)               │
@@ -252,7 +265,7 @@ Question en langage naturel
 │  │  • AuthMiddleware (Bearer Token)                               │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools (27 outils)                                         │  │
+│  │  MCP Tools (28 outils)                                         │  │
 │  │  • memory_create/delete/list/stats                             │  │
 │  │  • memory_ingest/search/get_context                            │  │
 │  │  • question_answer / memory_query                              │  │
@@ -404,7 +417,7 @@ Accessible à : **http://localhost:8080/graph**
 ### Installation des dépendances CLI
 
 ```bash
-pip install httpx httpx-sse click rich prompt_toolkit
+pip install httpx click rich prompt_toolkit mcp
 ```
 
 ### Mode Click (scriptable)
@@ -448,37 +461,37 @@ mcp> exit                          # Quitter
 
 ### Tableau complet des commandes
 
-| Fonctionnalité     | CLI Click                       | Shell interactif           |
-| ------------------ | ------------------------------- | -------------------------- |
-| État serveur       | `health`                        | `health`                   |
-| Lister mémoires    | `memory list`                   | `list`                     |
-| Créer mémoire      | `memory create ID -o onto`      | `create ID onto`           |
-| Supprimer mémoire  | `memory delete ID`              | `delete [ID]`              |
-| Info mémoire       | `memory info ID`                | `info`                     |
-| Graphe texte       | `memory graph ID`               | `graph [ID]`               |
-| Entités par type   | `memory entities ID`            | `entities`                 |
-| Contexte entité    | `memory entity ID NAME`         | `entity NAME`              |
-| Relations par type | `memory relations ID [-t TYPE]` | `relations [TYPE]`         |
-| Lister documents   | `document list ID`              | `docs`                     |
-| Ingérer document   | `document ingest ID PATH`       | `ingest PATH`              |
-| Supprimer document | `document delete ID DOC`        | `deldoc DOC`               |
-| Question/Réponse   | `ask ID "question"`             | `ask question`             |
-| Query structuré    | `query ID "question"`           | `query question`           |
-| Vérif. stockage S3 | `storage check [ID]`            | `check [ID]`               |
-| Nettoyage S3       | `storage cleanup [-f]`          | `cleanup [--force]`        |
-| Ontologies dispo.  | `ontologies`                    | `ontologies`               |
-| Créer backup       | `backup create ID`              | `backup-create [ID]`                      |
-| Lister backups     | `backup list [ID]`              | `backup-list [ID]`                        |
-| Restaurer backup   | `backup restore BACKUP_ID`      | `backup-restore BACKUP_ID`                |
+| Fonctionnalité     | CLI Click                       | Shell interactif                                  |
+| ------------------ | ------------------------------- | ------------------------------------------------- |
+| État serveur       | `health`                        | `health`                                          |
+| Lister mémoires    | `memory list`                   | `list`                                            |
+| Créer mémoire      | `memory create ID -o onto`      | `create ID onto`                                  |
+| Supprimer mémoire  | `memory delete ID`              | `delete [ID]`                                     |
+| Info mémoire       | `memory info ID`                | `info`                                            |
+| Graphe texte       | `memory graph ID`               | `graph [ID]`                                      |
+| Entités par type   | `memory entities ID`            | `entities`                                        |
+| Contexte entité    | `memory entity ID NAME`         | `entity NAME`                                     |
+| Relations par type | `memory relations ID [-t TYPE]` | `relations [TYPE]`                                |
+| Lister documents   | `document list ID`              | `docs`                                            |
+| Ingérer document   | `document ingest ID PATH`       | `ingest PATH`                                     |
+| Supprimer document | `document delete ID DOC`        | `deldoc DOC`                                      |
+| Question/Réponse   | `ask ID "question"`             | `ask question`                                    |
+| Query structuré    | `query ID "question"`           | `query question`                                  |
+| Vérif. stockage S3 | `storage check [ID]`            | `check [ID]`                                      |
+| Nettoyage S3       | `storage cleanup [-f]`          | `cleanup [--force]`                               |
+| Ontologies dispo.  | `ontologies`                    | `ontologies`                                      |
+| Créer backup       | `backup create ID`              | `backup-create [ID]`                              |
+| Lister backups     | `backup list [ID]`              | `backup-list [ID]`                                |
+| Restaurer backup   | `backup restore BACKUP_ID`      | `backup-restore BACKUP_ID`                        |
 | Télécharger backup | `backup download BACKUP_ID`     | `backup-download BACKUP_ID [--include-documents]` |
-| Supprimer backup   | `backup delete BACKUP_ID`       | `backup-delete BACKUP_ID`                 |
-| Restore fichier    | `backup restore-file PATH`      | *(via Click uniquement)*                  |
+| Supprimer backup   | `backup delete BACKUP_ID`       | `backup-delete BACKUP_ID`                         |
+| Restore fichier    | `backup restore-file PATH`      | *(via Click uniquement)*                          |
 
 ---
 
 ## 🔧 Outils MCP
 
-27 outils exposés via le protocole MCP (HTTP/SSE) :
+28 outils exposés via le protocole MCP (Streamable HTTP) :
 
 ### Gestion des mémoires
 
@@ -550,12 +563,12 @@ Les ontologies définissent les **types d'entités** et **types de relations** q
 
 ### Ontologies fournies
 
-| Ontologie          | Fichier                            | Entités  | Relations | Usage                                            |
-| ------------------ | ---------------------------------- | -------- | --------- | ------------------------------------------------ |
-| `legal`            | `ONTOLOGIES/legal.yaml`            | 22 types | 22 types  | Documents juridiques, contrats                   |
-| `cloud`            | `ONTOLOGIES/cloud.yaml`            | 27 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques |
-| `managed-services` | `ONTOLOGIES/managed-services.yaml` | 20 types | 16 types  | Services managés, infogérance                    |
-| `presales`         | `ONTOLOGIES/presales.yaml`         | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales  |
+| Ontologie          | Fichier                            | Entités  | Relations | Usage                                                              |
+| ------------------ | ---------------------------------- | -------- | --------- | ------------------------------------------------------------------ |
+| `legal`            | `ONTOLOGIES/legal.yaml`            | 22 types | 22 types  | Documents juridiques, contrats                                     |
+| `cloud`            | `ONTOLOGIES/cloud.yaml`            | 27 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques             |
+| `managed-services` | `ONTOLOGIES/managed-services.yaml` | 20 types | 16 types  | Services managés, infogérance                                      |
+| `presales`         | `ONTOLOGIES/presales.yaml`         | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales                    |
 | `general`          | `ONTOLOGIES/general.yaml`          | 24 types | 22 types  | Générique : FAQ, référentiels, certifications, RSE, specs produits |
 
 > Toutes les ontologies utilisent les limites d'extraction `max_entities: 60` / `max_relations: 80`.
@@ -600,7 +613,7 @@ instructions: |
 
 ## 🌍 API REST
 
-En plus du protocole MCP (SSE), le service expose une API REST. **Tous les endpoints `/api/*` requièrent un Bearer Token** (même header `Authorization` que pour MCP). Seuls `/health` et les fichiers statiques (`/graph`, `/static/`) sont publics.
+En plus du protocole MCP (Streamable HTTP), le service expose une API REST. **Tous les endpoints `/api/*` requièrent un Bearer Token** (même header `Authorization` que pour MCP). Seuls `/health` et les fichiers statiques (`/graph`, `/static/`) sont publics.
 
 ### Endpoints publics (pas d'authentification)
 
@@ -672,7 +685,7 @@ Ajoutez dans votre configuration MCP :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/sse",
+      "url": "http://localhost:8080/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN"
       }
@@ -684,14 +697,14 @@ Ajoutez dans votre configuration MCP :
 ### Via Python (client MCP)
 
 ```python
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp import ClientSession
 import base64
 
 async def exemple():
     headers = {"Authorization": "Bearer votre_token"}
     
-    async with sse_client("http://localhost:8080/sse", headers=headers) as (read, write):
+    async with streamablehttp_client("http://localhost:8080/mcp", headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             
@@ -728,17 +741,17 @@ async def exemple():
 
 ### Authentification
 
-- **Protocole MCP** (SSE) : Bearer Token obligatoire dans le header `Authorization`
+- **Protocole MCP** (Streamable HTTP) : Bearer Token obligatoire dans le header `Authorization`
 - **API REST** (`/api/*`) : Bearer Token obligatoire (même token que MCP)
 - **Interface web** (`/graph`, `/static/*`) : accès public (le JS injecte le token depuis `localStorage`)
-- **Requêtes internes** (localhost/127.0.0.1) : exemptées d'authentification pour MCP/SSE uniquement (pas pour `/api/*`)
+- **Requêtes internes** (localhost/127.0.0.1) : exemptées d'authentification pour MCP uniquement (pas pour `/api/*`)
 - **Health check** (`/health`) : accès public
 
 ### Gestion des tokens
 
 ```bash
 # Créer un token (via la clé bootstrap admin)
-curl -X POST http://localhost:8002/sse \
+curl -X POST http://localhost:8080/mcp \
   -H "Authorization: Bearer ADMIN_BOOTSTRAP_KEY" \
   # ... appel MCP admin_create_token
 
@@ -794,12 +807,12 @@ graph-memory/
 │
 ├── scripts/                  # CLI et utilitaires
 │   ├── mcp_cli.py            # Point d'entrée CLI (Click + Shell)
+│   ├── test_service.py       # Test end-to-end officiel (27 tests, 9 catégories)
 │   ├── README.md             # Documentation CLI
-│   ├── test_rag_thresholds.py   # Benchmark seuils RAG
 │   ├── view_graph.py         # Visualisation graphe en terminal
 │   └── cli/                  # Package CLI
 │       ├── __init__.py
-│       ├── client.py         # Client HTTP/SSE vers le serveur MCP
+│       ├── client.py         # Client Streamable HTTP vers le serveur MCP
 │       ├── commands.py       # Commandes Click (interface scriptable)
 │       ├── display.py        # Affichage Rich (tables, panels, graphe)
 │       └── shell.py          # Shell interactif prompt_toolkit
@@ -855,10 +868,10 @@ Graph Memory s'intègre nativement avec [Live Memory](https://github.com/chrlesu
 
 La recherche récente sur les MAS à base de LLM ([Tran et al., 2025 — *Multi-Agent Collaboration Mechanisms*](https://arxiv.org/abs/2501.06322)) identifie la mémoire partagée comme composant fondamental des systèmes collaboratifs. Un seul niveau ne suffit pas :
 
-| Niveau | Service | Durée | Contenu | Usage |
-|--------|---------|-------|---------|-------|
-| **Mémoire de travail** | Live Memory | Session / projet | Notes brutes + bank consolidée Markdown | Contexte opérationnel quotidien |
-| **Mémoire long terme** | Graph Memory | Permanent | Entités + relations + embeddings vectoriels | Base de connaissances interrogeable |
+| Niveau                 | Service      | Durée            | Contenu                                     | Usage                               |
+| ---------------------- | ------------ | ---------------- | ------------------------------------------- | ----------------------------------- |
+| **Mémoire de travail** | Live Memory  | Session / projet | Notes brutes + bank consolidée Markdown     | Contexte opérationnel quotidien     |
+| **Mémoire long terme** | Graph Memory | Permanent        | Entités + relations + embeddings vectoriels | Base de connaissances interrogeable |
 
 ```
   Agents IA (Cline, Claude, ...)
@@ -868,7 +881,7 @@ La recherche récente sur les MAS à base de LLM ([Tran et al., 2025 — *Multi-
   │  Live Memory        │  Notes temps réel → LLM → Memory Bank
   │  (mémoire travail)  │  S3-only, pas de BDD
   └──────────┬──────────┘
-             │ graph_push (MCP SSE)
+             │ graph_push (MCP Streamable HTTP)
              │ delete + re-ingest → recalcul du graphe
              ▼
   ┌──────────────────────┐
@@ -883,7 +896,7 @@ Live Memory dispose de 4 outils MCP dédiés (`graph_connect`, `graph_push`, `gr
 
 1. **`graph_connect`** — L'agent connecte son space Live Memory à une mémoire Graph Memory (crée la mémoire si besoin, ontologie paramétrable)
 2. **`bank_consolidate`** — Le LLM de Live Memory consolide les notes en fichiers bank Markdown
-3. **`graph_push`** — Les fichiers bank sont poussés dans Graph Memory via le protocole MCP SSE. Chaque fichier est supprimé puis ré-ingéré pour recalculer le graphe complet
+3. **`graph_push`** — Les fichiers bank sont poussés dans Graph Memory via le protocole MCP Streamable HTTP. Chaque fichier est supprimé puis ré-ingéré pour recalculer le graphe complet
 4. **`graph_status`** — Vérifie la connexion et affiche les stats (documents, entités, relations, top entités)
 
 ### Résultat
@@ -911,13 +924,13 @@ docker compose exec mcp-memory env | grep -E "S3_|LLMAAS_|NEO4J_"
 
 - **Cause** : le SDK MCP v1.26+ active une protection DNS rebinding quand `host="127.0.0.1"` (défaut). Le `Host` header public est rejeté.
 - **Fix** : vérifiez que `FastMCP` est initialisé avec `host="0.0.0.0"` (ou `settings.mcp_server_host`) dans `server.py`. Depuis v1.2.2, c'est le comportement par défaut.
-- **Vérification** : `curl -s -o /dev/null -w '%{http_code}' https://votre-domaine/sse` → ne doit PAS retourner 421.
+- **Vérification** : `curl -s -o /dev/null -w '%{http_code}' https://votre-domaine/mcp` → ne doit PAS retourner 421.
 
 ### Erreur 401 Unauthorized
 
 - Vérifiez que votre token est valide
 - Les endpoints publics (`/health`, `/graph`, `/static/*`) ne nécessitent pas de token
-- **Tous les `/api/*`** et les requêtes MCP via SSE (`/sse`) nécessitent un Bearer Token
+- **Tous les `/api/*`** et les requêtes MCP (`/mcp`) nécessitent un Bearer Token
 
 ### Page web blanche
 
@@ -947,4 +960,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v1.3.6 — Février 2026*
+*Graph Memory v1.4.0 — Avril 2026*

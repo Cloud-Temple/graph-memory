@@ -38,7 +38,8 @@ RUN groupadd -r mcp && useradd -r -g mcp -d /app -s /sbin/nologin mcp
 # Copie des ontologies
 COPY ONTOLOGIES/ ./ONTOLOGIES/
 
-# Copie du code source
+# Copie de la version et du code source
+COPY VERSION .
 COPY src/ ./src/
 
 # Donner les droits à l'utilisateur mcp
@@ -50,12 +51,9 @@ EXPOSE 8002
 # Passer en utilisateur non-root
 USER mcp
 
-# Healthcheck (curl = léger, pas de fork Python qui consomme 50MB+)
-# /sse est un endpoint SSE (streaming infini) : curl reçoit le HTTP 200 puis
-# timeout car le flux ne se ferme jamais → exit code 28.
-# On accepte exit 0 (succès) OU exit 28 (timeout après connexion réussie) = healthy.
+# Healthcheck via /health endpoint (léger, pas de fork Python)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -sf http://localhost:8002/sse --max-time 2 -o /dev/null 2>/dev/null; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 28 ]
+    CMD curl -sf http://localhost:8002/health -o /dev/null 2>/dev/null
 
 # Point d'entrée
 ENTRYPOINT ["python", "-m", "src.mcp_memory.server"]

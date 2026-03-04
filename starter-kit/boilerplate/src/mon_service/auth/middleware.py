@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Middlewares ASGI : authentification, logging, normalisation Host.
+Middlewares ASGI : authentification, logging.
 
 Pile d'exécution (ordre) :
-    AuthMiddleware → LoggingMiddleware → HostNormalizerMiddleware → mcp.sse_app()
+    AuthMiddleware → LoggingMiddleware → mcp.streamable_http_app()
 """
 
 import sys
@@ -131,24 +131,4 @@ class LoggingMiddleware:
                 )
 
 
-class HostNormalizerMiddleware:
-    """
-    Middleware ASGI qui normalise le header Host.
-
-    Utile quand un reverse proxy (nginx/Caddy) transmet le Host public
-    alors que le SDK MCP/Starlette n'accepte que localhost.
-    """
-
-    def __init__(self, app, target_host: str = "localhost"):
-        self.app = app
-        self.target_host = target_host.encode()
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] in ("http", "websocket"):
-            new_headers = []
-            for key, value in scope.get("headers", []):
-                if key == b"host":
-                    value = self.target_host
-                new_headers.append((key, value))
-            scope = dict(scope, headers=new_headers)
-        await self.app(scope, receive, send)
+# NOTE: HostNormalizerMiddleware supprimé — inutile avec Streamable HTTP.

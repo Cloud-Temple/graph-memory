@@ -12,7 +12,7 @@ Deux modes d'utilisation :
 
 ```bash
 # Dépendances CLI
-pip install httpx httpx-sse click rich prompt_toolkit
+pip install httpx click rich prompt_toolkit
 
 # Serveur MCP Memory démarré
 docker compose up -d
@@ -409,8 +409,8 @@ scripts/
 ├── view_graph.py         # Visualisation graphe en terminal
 └── cli/
     ├── __init__.py       # Configuration (URL, token)
-    ├── client.py         # Client HTTP/SSE vers le serveur MCP
-    ├── ingest_progress.py # Progression ingestion temps réel partagée (Rich Live + SSE)
+    ├── client.py         # Client Streamable HTTP vers le serveur MCP
+    ├── ingest_progress.py # Progression ingestion temps réel partagée (Rich Live + Streamable HTTP)
     ├── commands.py       # Commandes Click (mode scriptable)
     ├── display.py        # Affichage Rich (tables, panels, graphe, tokens)
     └── shell.py          # Shell interactif prompt_toolkit
@@ -418,7 +418,7 @@ scripts/
 
 ### Client MCP (`client.py`)
 
-Le client communique avec le serveur via **HTTP/SSE** (Server-Sent Events) en utilisant le protocole MCP. Il encapsule :
+Le client communique avec le serveur via **Streamable HTTP** en utilisant le protocole MCP. Il encapsule :
 
 - `list_memories()` → outil `memory_list`
 - `get_graph(memory_id)` → outil `memory_graph`
@@ -466,7 +466,7 @@ python scripts/mcp_cli.py --token <votre_token> health
 ### "ModuleNotFoundError: No module named 'httpx'"
 
 ```bash
-pip install httpx httpx-sse click rich prompt_toolkit
+pip install httpx click rich prompt_toolkit
 ```
 
 ---

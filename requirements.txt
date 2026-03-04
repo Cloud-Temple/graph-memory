@@ -4,10 +4,10 @@
 # Installation : pip install -r requirements.txt
 # =============================================================================
 
-# === MCP SDK ===
-mcp>=1.0.0
+# === MCP SDK (Streamable HTTP transport) ===
+mcp>=1.8.0
 
-# === Web Framework (pour FastMCP HTTP/SSE) ===
+# === Web Framework (pour FastMCP Streamable HTTP) ===
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
 starlette>=0.27.0
