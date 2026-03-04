@@ -36,8 +36,15 @@
 - `scripts/test_streamable_http.py` — script de test complet
 - `starter-kit/boilerplate/` — tous les fichiers alignés
 
+**Documentation mise à jour (2026-04-03)** :
+- CHANGELOG.md : entrée v1.4.0 complète (migration SSE → Streamable HTTP)
+- README.md : section Changelog mise à jour (v1.4.0 + v1.3.7), footer v1.4.0
+- docker-compose.yml : healthcheck corrigé `/sse` → `/health` (causait des 404 en boucle)
+- README.en.md : restauré (traduction fidèle à faire manuellement par Christophe)
+
 **Prochaines étapes** :
-- [ ] Commit final des fixes (version, Dockerfile, rate limiting)
+- [ ] Traduire README.en.md + créer CHANGELOG.en.md (Christophe s'en occupe)
+- [ ] Commit final de la documentation + healthcheck fix
 - [ ] Merge sur main + bump VERSION → 1.4.0
 - [ ] Redéployer en production
 - [ ] Coordonner la migration Live Memory (même pattern)

@@ -1,5 +1,52 @@
 # Changelog
 
+## [1.4.0] - 2026-04-03
+
+### 🔄 Migration SSE → Streamable HTTP (issue #1)
+
+**Migration complète** du transport MCP de SSE (déprécié dans la spec MCP 2025-03-26) vers **Streamable HTTP**. Migration propre sans rétrocompatibilité.
+
+| Composant            | Avant (SSE)                                         | Après (Streamable HTTP)                                        |
+| -------------------- | --------------------------------------------------- | -------------------------------------------------------------- |
+| **server.py**        | `mcp.sse_app()` → endpoints `/sse` + `/messages`    | `mcp.streamable_http_app()` → endpoint unique `/mcp`           |
+| **client.py**        | `from mcp.client.sse import sse_client`             | `from mcp.client.streamable_http import streamablehttp_client` |
+| **middleware.py**    | `HostNormalizerMiddleware` (workaround Host header) | Supprimé (plus nécessaire)                                     |
+| **requirements.txt** | `mcp>=1.0.0`                                        | `mcp>=1.8.0`                                                   |
+| **waf/Caddyfile**    | Routes `/sse*` + `/messages/*` séparées             | Route unique `/mcp*`                                           |
+| **Rate limiting**    | SSE 10/min + messages 60/min + global 200/min       | MCP 200/min + global 500/min                                   |
+| **Dockerfile**       | Healthcheck `/sse`, VERSION non copié               | Healthcheck `/health`, `COPY VERSION .`                        |
+| **Health endpoint**  | Version hardcodée `"1.1.0"`                         | Lecture dynamique fichier `VERSION`                            |
+
+#### Modifié
+- **`src/mcp_memory/server.py`** — `mcp.streamable_http_app()` remplace `mcp.sse_app()`, endpoint unique `/mcp`
+- **`scripts/cli/client.py`** — `streamablehttp_client` remplace `sse_client`
+- **`src/mcp_memory/auth/middleware.py`** — Suppression de `HostNormalizerMiddleware` (plus nécessaire avec Streamable HTTP). Version `/health` lue dynamiquement depuis le fichier `VERSION`
+- **`requirements.txt`** — `mcp>=1.8.0` (SDK Streamable HTTP)
+- **`waf/Caddyfile`** — Route unique `/mcp*` (remplace `/sse*` + `/messages/*`). Rate limiting ajusté : 200 req/min pour `/mcp` (×3 car chaque appel MCP = 3 requêtes HTTP), 500 global
+- **`Dockerfile`** — `COPY VERSION .` ajouté, healthcheck pointe vers `/health` (au lieu de `/sse`)
+- **`README.md`** — SSE → Streamable HTTP partout (architecture, intégration, exemples de code, dépannage)
+- **`README.en.md`** — Traduction anglaise complète et fidèle du README.md français
+- **`scripts/README.md`** — SSE → Streamable HTTP
+- **`starter-kit/boilerplate/`** — Tous les fichiers alignés sur Streamable HTTP (server.py, client.py, middleware.py, Caddyfile, requirements.txt)
+
+#### Ajouté
+- **`scripts/test_service.py`** — Script de test end-to-end officiel (27 tests, 9 catégories, nettoyage automatique)
+- **`DESIGN/MIGRATION_STREAMABLE_HTTP.md`** — Guide de migration détaillé (pour Live Memory et autres services)
+- **`CHANGELOG.en.md`** — Version anglaise du changelog
+
+#### Supprimé
+- **`HostNormalizerMiddleware`** — Plus nécessaire (Streamable HTTP n'a pas la validation DNS rebinding de SSE)
+
+#### Tests de qualification
+`scripts/test_service.py` — **27/27 PASS en ~10s**
+
+#### Notes de migration
+- **Clients MCP** : remplacer `url: "http://host:8080/sse"` par `url: "http://host:8080/mcp"` dans la configuration
+- **SDK Python** : `mcp>=1.8.0` requis, utiliser `streamablehttp_client` au lieu de `sse_client`
+- **Rate limiting** : chaque appel d'outil MCP en Streamable HTTP = 3 requêtes HTTP (POST init + POST call + DELETE close), d'où les limites plus élevées
+
+---
+
 ## [1.3.7] - 2026-02-19
 
 ### 🧠 Ontologie `general.yaml` v1.0 → v1.1 — Réduction "Other" pour REFERENTIEL
@@ -200,13 +247,13 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 #### Modifié
 - **Uniformisation des limites d'extraction** (`ONTOLOGIES/*.yaml`, `src/mcp_memory/core/ontology.py`) — Toutes les ontologies ont maintenant les mêmes limites :
 
-  | Ontologie          | Avant       | Après  |
-  | ------------------ | ----------- | ------ |
-  | `legal.yaml`       | absent      | 60/80  |
-  | `cloud.yaml`       | 50/60       | 60/80  |
-  | `technical.yaml`   | 60/70       | 60/80  |
-  | `managed-services.yaml` | 50/60  | 60/80  |
-  | `presales.yaml`    | 60/80       | 60/80  |
+  | Ontologie               | Avant  | Après |
+  | ----------------------- | ------ | ----- |
+  | `legal.yaml`            | absent | 60/80 |
+  | `cloud.yaml`            | 50/60  | 60/80 |
+  | `technical.yaml`        | 60/70  | 60/80 |
+  | `managed-services.yaml` | 50/60  | 60/80 |
+  | `presales.yaml`         | 60/80  | 60/80 |
 
 - **Défauts Python** (`core/ontology.py`) — `ExtractionRules.max_entities` 30→**60**, `ExtractionRules.max_relations` 40→**80** (pour les ontologies futures qui n'expliciteraient pas ces valeurs)
 

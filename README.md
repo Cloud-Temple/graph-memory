@@ -68,6 +68,17 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 > Historique complet : voir [CHANGELOG.md](CHANGELOG.md)
 
+### v1.4.0 — 3 avril 2026 — 🔄 Migration SSE → Streamable HTTP
+- 🔄 **Migration complète SSE → Streamable HTTP** — Endpoint unique `/mcp` remplaçant `/sse` + `/messages`. `mcp>=1.8.0` requis.
+- 🔧 **WAF mis à jour** — Route unique `/mcp*`, rate limiting ajusté (200 req/min MCP, 500 global)
+- 🐳 **Dockerfile corrigé** — `COPY VERSION .`, healthcheck sur `/health`
+- 🧪 **Test end-to-end officiel** — `scripts/test_service.py` — 27 tests, 9 catégories, nettoyage auto
+- 📖 **Guide de migration** — `DESIGN/MIGRATION_STREAMABLE_HTTP.md`
+- ❌ **`HostNormalizerMiddleware` supprimé** — Plus nécessaire avec Streamable HTTP
+
+### v1.3.7 — 19 février 2026 — 🧠 Ontologie general.yaml v1.1
+- 🧠 **general.yaml v1.1** — +4 entités (LegalProvision, Sector, Sanction, Stakeholder), +2 relations (APPLIES_TO, IMPOSES), ~50 lignes `special_instructions` anti-"Other" pour REFERENTIEL
+
 ### v1.3.6 — 18 février 2026 — 🧠 Qualité ontologies + Ontologie general + CLI Répertoire
 - 📚 **Nouvelle ontologie `general` v1.0** — 24 entités / 22 relations, filet de sécurité universel pour FAQ, certifications, RSE, specs produits, knowledge bases
 - 🧠 **cloud.yaml v1.2** — +2 types (Role, SLALevel), 12 mappings obligatoires, 8 catégories d'exclusion → **0 "Other"** sur 4 documents test (vs 9-12 avant)
@@ -450,31 +461,31 @@ mcp> exit                          # Quitter
 
 ### Tableau complet des commandes
 
-| Fonctionnalité     | CLI Click                       | Shell interactif           |
-| ------------------ | ------------------------------- | -------------------------- |
-| État serveur       | `health`                        | `health`                   |
-| Lister mémoires    | `memory list`                   | `list`                     |
-| Créer mémoire      | `memory create ID -o onto`      | `create ID onto`           |
-| Supprimer mémoire  | `memory delete ID`              | `delete [ID]`              |
-| Info mémoire       | `memory info ID`                | `info`                     |
-| Graphe texte       | `memory graph ID`               | `graph [ID]`               |
-| Entités par type   | `memory entities ID`            | `entities`                 |
-| Contexte entité    | `memory entity ID NAME`         | `entity NAME`              |
-| Relations par type | `memory relations ID [-t TYPE]` | `relations [TYPE]`         |
-| Lister documents   | `document list ID`              | `docs`                     |
-| Ingérer document   | `document ingest ID PATH`       | `ingest PATH`              |
-| Supprimer document | `document delete ID DOC`        | `deldoc DOC`               |
-| Question/Réponse   | `ask ID "question"`             | `ask question`             |
-| Query structuré    | `query ID "question"`           | `query question`           |
-| Vérif. stockage S3 | `storage check [ID]`            | `check [ID]`               |
-| Nettoyage S3       | `storage cleanup [-f]`          | `cleanup [--force]`        |
-| Ontologies dispo.  | `ontologies`                    | `ontologies`               |
-| Créer backup       | `backup create ID`              | `backup-create [ID]`                      |
-| Lister backups     | `backup list [ID]`              | `backup-list [ID]`                        |
-| Restaurer backup   | `backup restore BACKUP_ID`      | `backup-restore BACKUP_ID`                |
+| Fonctionnalité     | CLI Click                       | Shell interactif                                  |
+| ------------------ | ------------------------------- | ------------------------------------------------- |
+| État serveur       | `health`                        | `health`                                          |
+| Lister mémoires    | `memory list`                   | `list`                                            |
+| Créer mémoire      | `memory create ID -o onto`      | `create ID onto`                                  |
+| Supprimer mémoire  | `memory delete ID`              | `delete [ID]`                                     |
+| Info mémoire       | `memory info ID`                | `info`                                            |
+| Graphe texte       | `memory graph ID`               | `graph [ID]`                                      |
+| Entités par type   | `memory entities ID`            | `entities`                                        |
+| Contexte entité    | `memory entity ID NAME`         | `entity NAME`                                     |
+| Relations par type | `memory relations ID [-t TYPE]` | `relations [TYPE]`                                |
+| Lister documents   | `document list ID`              | `docs`                                            |
+| Ingérer document   | `document ingest ID PATH`       | `ingest PATH`                                     |
+| Supprimer document | `document delete ID DOC`        | `deldoc DOC`                                      |
+| Question/Réponse   | `ask ID "question"`             | `ask question`                                    |
+| Query structuré    | `query ID "question"`           | `query question`                                  |
+| Vérif. stockage S3 | `storage check [ID]`            | `check [ID]`                                      |
+| Nettoyage S3       | `storage cleanup [-f]`          | `cleanup [--force]`                               |
+| Ontologies dispo.  | `ontologies`                    | `ontologies`                                      |
+| Créer backup       | `backup create ID`              | `backup-create [ID]`                              |
+| Lister backups     | `backup list [ID]`              | `backup-list [ID]`                                |
+| Restaurer backup   | `backup restore BACKUP_ID`      | `backup-restore BACKUP_ID`                        |
 | Télécharger backup | `backup download BACKUP_ID`     | `backup-download BACKUP_ID [--include-documents]` |
-| Supprimer backup   | `backup delete BACKUP_ID`       | `backup-delete BACKUP_ID`                 |
-| Restore fichier    | `backup restore-file PATH`      | *(via Click uniquement)*                  |
+| Supprimer backup   | `backup delete BACKUP_ID`       | `backup-delete BACKUP_ID`                         |
+| Restore fichier    | `backup restore-file PATH`      | *(via Click uniquement)*                          |
 
 ---
 
@@ -552,12 +563,12 @@ Les ontologies définissent les **types d'entités** et **types de relations** q
 
 ### Ontologies fournies
 
-| Ontologie          | Fichier                            | Entités  | Relations | Usage                                            |
-| ------------------ | ---------------------------------- | -------- | --------- | ------------------------------------------------ |
-| `legal`            | `ONTOLOGIES/legal.yaml`            | 22 types | 22 types  | Documents juridiques, contrats                   |
-| `cloud`            | `ONTOLOGIES/cloud.yaml`            | 27 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques |
-| `managed-services` | `ONTOLOGIES/managed-services.yaml` | 20 types | 16 types  | Services managés, infogérance                    |
-| `presales`         | `ONTOLOGIES/presales.yaml`         | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales  |
+| Ontologie          | Fichier                            | Entités  | Relations | Usage                                                              |
+| ------------------ | ---------------------------------- | -------- | --------- | ------------------------------------------------------------------ |
+| `legal`            | `ONTOLOGIES/legal.yaml`            | 22 types | 22 types  | Documents juridiques, contrats                                     |
+| `cloud`            | `ONTOLOGIES/cloud.yaml`            | 27 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques             |
+| `managed-services` | `ONTOLOGIES/managed-services.yaml` | 20 types | 16 types  | Services managés, infogérance                                      |
+| `presales`         | `ONTOLOGIES/presales.yaml`         | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales                    |
 | `general`          | `ONTOLOGIES/general.yaml`          | 24 types | 22 types  | Générique : FAQ, référentiels, certifications, RSE, specs produits |
 
 > Toutes les ontologies utilisent les limites d'extraction `max_entities: 60` / `max_relations: 80`.
@@ -796,8 +807,8 @@ graph-memory/
 │
 ├── scripts/                  # CLI et utilitaires
 │   ├── mcp_cli.py            # Point d'entrée CLI (Click + Shell)
+│   ├── test_service.py       # Test end-to-end officiel (27 tests, 9 catégories)
 │   ├── README.md             # Documentation CLI
-│   ├── test_rag_thresholds.py   # Benchmark seuils RAG
 │   ├── view_graph.py         # Visualisation graphe en terminal
 │   └── cli/                  # Package CLI
 │       ├── __init__.py
@@ -857,10 +868,10 @@ Graph Memory s'intègre nativement avec [Live Memory](https://github.com/chrlesu
 
 La recherche récente sur les MAS à base de LLM ([Tran et al., 2025 — *Multi-Agent Collaboration Mechanisms*](https://arxiv.org/abs/2501.06322)) identifie la mémoire partagée comme composant fondamental des systèmes collaboratifs. Un seul niveau ne suffit pas :
 
-| Niveau | Service | Durée | Contenu | Usage |
-|--------|---------|-------|---------|-------|
-| **Mémoire de travail** | Live Memory | Session / projet | Notes brutes + bank consolidée Markdown | Contexte opérationnel quotidien |
-| **Mémoire long terme** | Graph Memory | Permanent | Entités + relations + embeddings vectoriels | Base de connaissances interrogeable |
+| Niveau                 | Service      | Durée            | Contenu                                     | Usage                               |
+| ---------------------- | ------------ | ---------------- | ------------------------------------------- | ----------------------------------- |
+| **Mémoire de travail** | Live Memory  | Session / projet | Notes brutes + bank consolidée Markdown     | Contexte opérationnel quotidien     |
+| **Mémoire long terme** | Graph Memory | Permanent        | Entités + relations + embeddings vectoriels | Base de connaissances interrogeable |
 
 ```
   Agents IA (Cline, Claude, ...)
@@ -949,4 +960,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v1.3.6 — Février 2026*
+*Graph Memory v1.4.0 — Avril 2026*

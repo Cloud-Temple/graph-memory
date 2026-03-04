@@ -31,13 +31,13 @@ Question (natural language)
     └──▶ LLM generates answer with source document citations
 ```
 
-| Criteria | Vector RAG | Graph Memory |
-|----------|-----------|--------------|
-| **Precision** | Approximate semantic similarity | Explicit typed relations |
-| **Traceability** | Anonymous chunks | Named entities + source documents |
-| **Exploration** | Unidirectional search | Multi-hop graph navigation |
-| **Visualization** | Difficult | Native interactive graph |
-| **Cross-document** | Mixed chunks | Explicit cross-document relations |
+| Criteria           | Vector RAG                      | Graph Memory                      |
+| ------------------ | ------------------------------- | --------------------------------- |
+| **Precision**      | Approximate semantic similarity | Explicit typed relations          |
+| **Traceability**   | Anonymous chunks                | Named entities + source documents |
+| **Exploration**    | Unidirectional search           | Multi-hop graph navigation        |
+| **Visualization**  | Difficult                       | Native interactive graph          |
+| **Cross-document** | Mixed chunks                    | Explicit cross-document relations |
 
 ---
 
@@ -103,16 +103,16 @@ open http://localhost:8080/graph
 
 ### Required Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `S3_ENDPOINT_URL` | S3 endpoint URL |
-| `S3_ACCESS_KEY_ID` | S3 access key |
-| `S3_SECRET_ACCESS_KEY` | S3 secret |
-| `S3_BUCKET_NAME` | S3 bucket name |
-| `LLMAAS_API_URL` | LLM API URL (OpenAI-compatible) |
-| `LLMAAS_API_KEY` | LLM API key |
-| `NEO4J_PASSWORD` | Neo4j password |
-| `ADMIN_BOOTSTRAP_KEY` | Bootstrap key for first token |
+| Variable               | Description                     |
+| ---------------------- | ------------------------------- |
+| `S3_ENDPOINT_URL`      | S3 endpoint URL                 |
+| `S3_ACCESS_KEY_ID`     | S3 access key                   |
+| `S3_SECRET_ACCESS_KEY` | S3 secret                       |
+| `S3_BUCKET_NAME`       | S3 bucket name                  |
+| `LLMAAS_API_URL`       | LLM API URL (OpenAI-compatible) |
+| `LLMAAS_API_KEY`       | LLM API key                     |
+| `NEO4J_PASSWORD`       | Neo4j password                  |
+| `ADMIN_BOOTSTRAP_KEY`  | Bootstrap key for first token   |
 
 ---
 
@@ -180,16 +180,16 @@ async def example():
 
 ## 🔧 MCP Tools (28)
 
-| Category | Tools |
-|----------|-------|
-| **Memory CRUD** | `memory_create`, `memory_delete`, `memory_list`, `memory_stats` |
-| **Ingestion** | `memory_ingest` |
-| **Search & Q&A** | `memory_search`, `memory_query`, `memory_get_context`, `question_answer` |
-| **Documents** | `document_list`, `document_get`, `document_delete` |
+| Category           | Tools                                                                                                          |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| **Memory CRUD**    | `memory_create`, `memory_delete`, `memory_list`, `memory_stats`                                                |
+| **Ingestion**      | `memory_ingest`                                                                                                |
+| **Search & Q&A**   | `memory_search`, `memory_query`, `memory_get_context`, `question_answer`                                       |
+| **Documents**      | `document_list`, `document_get`, `document_delete`                                                             |
 | **Backup/Restore** | `backup_create`, `backup_list`, `backup_restore`, `backup_download`, `backup_delete`, `backup_restore_archive` |
-| **Admin** | `admin_create_token`, `admin_list_tokens`, `admin_revoke_token`, `admin_update_token` |
-| **Diagnostics** | `system_health`, `system_about`, `storage_check`, `storage_cleanup` |
-| **Visualization** | `memory_graph`, `ontology_list` |
+| **Admin**          | `admin_create_token`, `admin_list_tokens`, `admin_revoke_token`, `admin_update_token`                          |
+| **Diagnostics**    | `system_health`, `system_about`, `storage_check`, `storage_cleanup`                                            |
+| **Visualization**  | `memory_graph`, `ontology_list`                                                                                |
 
 ---
 
@@ -197,13 +197,13 @@ async def example():
 
 Ontologies define the entity types and relation types the LLM should extract. Required when creating a memory.
 
-| Ontology | Entities | Relations | Use case |
-|----------|----------|-----------|----------|
-| `legal` | 22 | 22 | Legal documents, contracts |
-| `cloud` | 27 | 19 | Cloud infrastructure, product sheets |
-| `managed-services` | 20 | 16 | Managed services, outsourcing |
-| `presales` | 28 | 30 | Pre-sales, RFP/RFI, proposals |
-| `general` | 24 | 22 | Generic: FAQ, certifications, CSR, specs |
+| Ontology           | Entities | Relations | Use case                                 |
+| ------------------ | -------- | --------- | ---------------------------------------- |
+| `legal`            | 22       | 22        | Legal documents, contracts               |
+| `cloud`            | 27       | 19        | Cloud infrastructure, product sheets     |
+| `managed-services` | 20       | 16        | Managed services, outsourcing            |
+| `presales`         | 28       | 30        | Pre-sales, RFP/RFI, proposals            |
+| `general`          | 24       | 22        | Generic: FAQ, certifications, CSR, specs |
 
 Custom ontologies can be added as YAML files in `ONTOLOGIES/`.
 
@@ -250,10 +250,10 @@ python scripts/mcp_cli.py health
 
 Graph Memory integrates natively with [Live Memory](https://github.com/chrlesur/live-memory) to form a **two-tier memory architecture** for multi-agent systems:
 
-| Tier | Service | Duration | Content |
-|------|---------|----------|---------|
-| **Working memory** | Live Memory | Session/project | Raw notes → Markdown bank |
-| **Long-term memory** | Graph Memory | Permanent | Entities + relations + vector embeddings |
+| Tier                 | Service      | Duration        | Content                                  |
+| -------------------- | ------------ | --------------- | ---------------------------------------- |
+| **Working memory**   | Live Memory  | Session/project | Raw notes → Markdown bank                |
+| **Long-term memory** | Graph Memory | Permanent       | Entities + relations + vector embeddings |
 
 Agents take notes in Live Memory → LLM consolidates → `graph_push` ingests into Graph Memory → queryable knowledge graph.
 

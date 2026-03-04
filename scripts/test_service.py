@@ -1,24 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script de validation complète — Migration Streamable HTTP (issue #1)
+Script de test end-to-end — Graph Memory Service
 
-Ce script teste toutes les fonctionnalités de Graph Memory via le nouveau
-transport Streamable HTTP (endpoint /mcp) pour valider la branche dev.
+Teste toutes les fonctionnalités du service Graph Memory via le protocole
+MCP Streamable HTTP (endpoint /mcp). Crée une mémoire de test, ingère un
+document, vérifie la recherche, le Q&A, les backups, les tokens et l'API
+REST, puis nettoie automatiquement.
 
 Usage:
-    # Serveur local (défaut)
-    python3 scripts/test_streamable_http.py
+    # Serveur local (défaut : http://localhost:8080)
+    python3 scripts/test_service.py
 
     # Serveur distant
-    MCP_URL=https://graph-mem.example.com MCP_TOKEN=xxx python3 scripts/test_streamable_http.py
+    MCP_URL=https://graph-mem.example.com MCP_TOKEN=xxx python3 scripts/test_service.py
 
     # Verbose (affiche les réponses complètes)
-    python3 scripts/test_streamable_http.py --verbose
+    python3 scripts/test_service.py --verbose
 
 Prérequis:
     - Le serveur doit tourner (docker compose up -d)
-    - pip install mcp>=1.8.0 aiohttp
+    - pip install mcp>=1.8.0 httpx
+
+Catégories de tests (9) :
+    1. Connectivité     — REST /health + MCP system_health + system_about
+    2. CRUD Mémoire     — ontology_list + memory_create/list/stats
+    3. Ingestion        — memory_ingest + notifications de progression
+    4. Recherche & Q&A  — memory_search + question_answer + memory_query + memory_get_context
+    5. Documents        — document_list + document_get + memory_graph
+    6. Stockage S3      — storage_check
+    7. Backup           — backup_create + backup_list + backup_delete
+    8. Tokens           — admin_list_tokens + admin_create_token + admin_revoke_token
+    9. API REST         — GET /api/memories + GET /api/graph/{id}
+
+Exit code: 0 si tous les tests passent, 1 sinon.
 """
 
 import os
@@ -38,12 +53,12 @@ from datetime import datetime
 BASE_URL = os.getenv("MCP_URL", os.getenv("MCP_SERVER_URL", "http://localhost:8080"))
 TOKEN = os.getenv("MCP_TOKEN", os.getenv("ADMIN_BOOTSTRAP_KEY", "admin_bootstrap_key_change_me"))
 
-TEST_MEMORY_ID = f"_test_streamable_{int(time.time())}"
-TEST_MEMORY_NAME = "Test Streamable HTTP"
+TEST_MEMORY_ID = f"_test_e2e_{int(time.time())}"
+TEST_MEMORY_NAME = "Test E2E"
 TEST_ONTOLOGY = "general"
 
 # Petit document Markdown pour les tests d'ingestion
-TEST_DOCUMENT = """# Test Document — Streamable HTTP Migration
+TEST_DOCUMENT = """# Test Document — Graph Memory E2E
 
 ## Cloud Temple
 
@@ -232,7 +247,7 @@ async def test_02_memory_crud():
             "memory_id": TEST_MEMORY_ID,
             "name": TEST_MEMORY_NAME,
             "ontology": TEST_ONTOLOGY,
-            "description": "Mémoire de test pour validation Streamable HTTP"
+            "description": "Mémoire de test end-to-end (auto-supprimée)"
         })
         ok = data.get("status") == "created"
         record("memory_create", ok, data.get("memory_id", data.get("message", "?")))
@@ -272,9 +287,9 @@ async def test_03_ingestion():
         data = await call_tool("memory_ingest", {
             "memory_id": TEST_MEMORY_ID,
             "content_base64": content_b64,
-            "filename": "test-streamable.md",
-            "metadata": {"test": True, "transport": "streamable-http"},
-            "source_path": "test/test-streamable.md",
+            "filename": "test-e2e.md",
+            "metadata": {"test": True},
+            "source_path": "test/test-e2e.md",
         })
         ok = data.get("status") == "ok"
         entities = data.get("entities_extracted", 0)
@@ -445,7 +460,7 @@ async def test_07_backup():
     try:
         data = await call_tool("backup_create", {
             "memory_id": TEST_MEMORY_ID,
-            "description": "Test backup Streamable HTTP"
+            "description": "Test backup E2E"
         })
         ok = data.get("status") == "ok"
         backup_id = data.get("backup_id")
@@ -489,7 +504,7 @@ async def test_08_tokens():
     # 8b. Créer un token de test
     try:
         data = await call_tool("admin_create_token", {
-            "client_name": f"test-streamable-{int(time.time())}",
+            "client_name": f"test-e2e-{int(time.time())}",
             "permissions": ["read"],
             "memory_ids": [TEST_MEMORY_ID],
         })
@@ -501,7 +516,7 @@ async def test_08_tokens():
         if ok:
             tokens = await call_tool("admin_list_tokens")
             for t in tokens.get("tokens", []):
-                if t.get("client_name", "").startswith("test-streamable-"):
+                if t.get("client_name", "").startswith("test-e2e-"):
                     token_hash = t.get("token_hash", "")[:12]
                     break
     except Exception as e:
@@ -560,7 +575,7 @@ async def test_99_cleanup():
 async def run_all_tests():
     """Exécute tous les tests dans l'ordre."""
     print("=" * 60)
-    print("🧪 VALIDATION COMPLÈTE — Streamable HTTP Transport")
+    print("🧪 TEST END-TO-END — Graph Memory Service")
     print(f"   Serveur : {BASE_URL}")
     print(f"   Token   : {'***' + TOKEN[-8:] if len(TOKEN) > 8 else '***'}")
     print(f"   Mémoire : {TEST_MEMORY_ID}")
@@ -626,9 +641,9 @@ async def run_all_tests():
     print("=" * 60)
 
     if FAIL == 0:
-        print("\n🎉 TOUS LES TESTS PASSENT — Migration Streamable HTTP validée !")
+        print("\n🎉 TOUS LES TESTS PASSENT !")
     else:
-        print(f"\n⚠️ {FAIL} TESTS EN ÉCHEC — À investiguer avant le merge")
+        print(f"\n⚠️ {FAIL} TESTS EN ÉCHEC")
         print("\nDétails des échecs :")
         for r in RESULTS:
             if r["status"] == "FAIL":
@@ -639,7 +654,7 @@ async def run_all_tests():
 
 def main():
     global VERBOSE
-    parser = argparse.ArgumentParser(description="Validation Streamable HTTP")
+    parser = argparse.ArgumentParser(description="Test end-to-end du service Graph Memory")
     parser.add_argument("--verbose", "-v", action="store_true", help="Affiche les réponses complètes")
     args = parser.parse_args()
     VERBOSE = args.verbose
