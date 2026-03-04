@@ -1,5 +1,7 @@
 # 🧠 Graph Memory — MCP Knowledge Graph Service
 
+
+> 🇬🇧 [English version](README.en.md)
 Service de mémoire persistante basé sur un **graphe de connaissances** pour les agents IA, implémenté avec le protocole [MCP (Model Context Protocol)](https://modelcontextprotocol.io/).
 
 Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
@@ -235,7 +237,7 @@ Question en langage naturel
 │                         Clients MCP                                  │
 │   (Claude Desktop, Cline, QuoteFlow, Vela, CLI, Interface Web)       │
 └──────────────────────────────┬───────────────────────────────────────┘
-                               │ HTTP/SSE + Bearer Token
+                               │ Streamable HTTP + Bearer Token
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │              Coraza WAF (Port 8080 — seul port exposé)               │
@@ -252,7 +254,7 @@ Question en langage naturel
 │  │  • AuthMiddleware (Bearer Token)                               │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools (27 outils)                                         │  │
+│  │  MCP Tools (28 outils)                                         │  │
 │  │  • memory_create/delete/list/stats                             │  │
 │  │  • memory_ingest/search/get_context                            │  │
 │  │  • question_answer / memory_query                              │  │
@@ -404,7 +406,7 @@ Accessible à : **http://localhost:8080/graph**
 ### Installation des dépendances CLI
 
 ```bash
-pip install httpx httpx-sse click rich prompt_toolkit
+pip install httpx click rich prompt_toolkit mcp
 ```
 
 ### Mode Click (scriptable)
@@ -478,7 +480,7 @@ mcp> exit                          # Quitter
 
 ## 🔧 Outils MCP
 
-27 outils exposés via le protocole MCP (HTTP/SSE) :
+28 outils exposés via le protocole MCP (Streamable HTTP) :
 
 ### Gestion des mémoires
 
@@ -600,7 +602,7 @@ instructions: |
 
 ## 🌍 API REST
 
-En plus du protocole MCP (SSE), le service expose une API REST. **Tous les endpoints `/api/*` requièrent un Bearer Token** (même header `Authorization` que pour MCP). Seuls `/health` et les fichiers statiques (`/graph`, `/static/`) sont publics.
+En plus du protocole MCP (Streamable HTTP), le service expose une API REST. **Tous les endpoints `/api/*` requièrent un Bearer Token** (même header `Authorization` que pour MCP). Seuls `/health` et les fichiers statiques (`/graph`, `/static/`) sont publics.
 
 ### Endpoints publics (pas d'authentification)
 
@@ -672,7 +674,7 @@ Ajoutez dans votre configuration MCP :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/sse",
+      "url": "http://localhost:8080/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN"
       }
@@ -684,14 +686,14 @@ Ajoutez dans votre configuration MCP :
 ### Via Python (client MCP)
 
 ```python
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp import ClientSession
 import base64
 
 async def exemple():
     headers = {"Authorization": "Bearer votre_token"}
     
-    async with sse_client("http://localhost:8080/sse", headers=headers) as (read, write):
+    async with streamablehttp_client("http://localhost:8080/mcp", headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             
@@ -728,17 +730,17 @@ async def exemple():
 
 ### Authentification
 
-- **Protocole MCP** (SSE) : Bearer Token obligatoire dans le header `Authorization`
+- **Protocole MCP** (Streamable HTTP) : Bearer Token obligatoire dans le header `Authorization`
 - **API REST** (`/api/*`) : Bearer Token obligatoire (même token que MCP)
 - **Interface web** (`/graph`, `/static/*`) : accès public (le JS injecte le token depuis `localStorage`)
-- **Requêtes internes** (localhost/127.0.0.1) : exemptées d'authentification pour MCP/SSE uniquement (pas pour `/api/*`)
+- **Requêtes internes** (localhost/127.0.0.1) : exemptées d'authentification pour MCP uniquement (pas pour `/api/*`)
 - **Health check** (`/health`) : accès public
 
 ### Gestion des tokens
 
 ```bash
 # Créer un token (via la clé bootstrap admin)
-curl -X POST http://localhost:8002/sse \
+curl -X POST http://localhost:8080/mcp \
   -H "Authorization: Bearer ADMIN_BOOTSTRAP_KEY" \
   # ... appel MCP admin_create_token
 
@@ -799,7 +801,7 @@ graph-memory/
 │   ├── view_graph.py         # Visualisation graphe en terminal
 │   └── cli/                  # Package CLI
 │       ├── __init__.py
-│       ├── client.py         # Client HTTP/SSE vers le serveur MCP
+│       ├── client.py         # Client Streamable HTTP vers le serveur MCP
 │       ├── commands.py       # Commandes Click (interface scriptable)
 │       ├── display.py        # Affichage Rich (tables, panels, graphe)
 │       └── shell.py          # Shell interactif prompt_toolkit
@@ -868,7 +870,7 @@ La recherche récente sur les MAS à base de LLM ([Tran et al., 2025 — *Multi-
   │  Live Memory        │  Notes temps réel → LLM → Memory Bank
   │  (mémoire travail)  │  S3-only, pas de BDD
   └──────────┬──────────┘
-             │ graph_push (MCP SSE)
+             │ graph_push (MCP Streamable HTTP)
              │ delete + re-ingest → recalcul du graphe
              ▼
   ┌──────────────────────┐
@@ -883,7 +885,7 @@ Live Memory dispose de 4 outils MCP dédiés (`graph_connect`, `graph_push`, `gr
 
 1. **`graph_connect`** — L'agent connecte son space Live Memory à une mémoire Graph Memory (crée la mémoire si besoin, ontologie paramétrable)
 2. **`bank_consolidate`** — Le LLM de Live Memory consolide les notes en fichiers bank Markdown
-3. **`graph_push`** — Les fichiers bank sont poussés dans Graph Memory via le protocole MCP SSE. Chaque fichier est supprimé puis ré-ingéré pour recalculer le graphe complet
+3. **`graph_push`** — Les fichiers bank sont poussés dans Graph Memory via le protocole MCP Streamable HTTP. Chaque fichier est supprimé puis ré-ingéré pour recalculer le graphe complet
 4. **`graph_status`** — Vérifie la connexion et affiche les stats (documents, entités, relations, top entités)
 
 ### Résultat
@@ -911,13 +913,13 @@ docker compose exec mcp-memory env | grep -E "S3_|LLMAAS_|NEO4J_"
 
 - **Cause** : le SDK MCP v1.26+ active une protection DNS rebinding quand `host="127.0.0.1"` (défaut). Le `Host` header public est rejeté.
 - **Fix** : vérifiez que `FastMCP` est initialisé avec `host="0.0.0.0"` (ou `settings.mcp_server_host`) dans `server.py`. Depuis v1.2.2, c'est le comportement par défaut.
-- **Vérification** : `curl -s -o /dev/null -w '%{http_code}' https://votre-domaine/sse` → ne doit PAS retourner 421.
+- **Vérification** : `curl -s -o /dev/null -w '%{http_code}' https://votre-domaine/mcp` → ne doit PAS retourner 421.
 
 ### Erreur 401 Unauthorized
 
 - Vérifiez que votre token est valide
 - Les endpoints publics (`/health`, `/graph`, `/static/*`) ne nécessitent pas de token
-- **Tous les `/api/*`** et les requêtes MCP via SSE (`/sse`) nécessitent un Bearer Token
+- **Tous les `/api/*`** et les requêtes MCP (`/mcp`) nécessitent un Bearer Token
 
 ### Page web blanche
 
