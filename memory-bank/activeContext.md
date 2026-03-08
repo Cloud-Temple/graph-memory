@@ -1,6 +1,18 @@
 # Active Context
 
-## Focus actuel (mis à jour 2026-04-03)
+## Focus actuel (mis à jour 2026-03-08)
+
+### Descriptions de paramètres MCP tools — TERMINÉ
+
+**Contexte** : Quand un serveur MCP est connecté à Cline, les paramètres des tools s'affichent dans l'interface. Sans description dans le schéma JSON, Cline affiche "No description" — inutile pour le LLM et l'utilisateur.
+
+**Solution appliquée** : Tous les **53 paramètres utilisateur** des **28 tools MCP** utilisent maintenant le pattern `Annotated[type, Field(description="...")]` de Pydantic dans `server.py`. Les 5 paramètres `ctx: Optional[Context]` restent sans description (internes FastMCP).
+
+**Script de vérification** : `scripts/check_param_descriptions.py` — vérifie automatiquement la conformité.
+
+---
+
+## Focus précédent (mis à jour 2026-04-03)
 
 ### Migration SSE → Streamable HTTP (issue #1) — EN COURS SUR BRANCHE DEV
 

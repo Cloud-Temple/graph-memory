@@ -11,10 +11,11 @@ import json
 import uuid
 import base64
 import argparse
-from typing import Optional, List, Dict, Any
+from typing import Annotated, Optional, List, Dict, Any
 
 import uvicorn
 from dotenv import load_dotenv
+from pydantic import Field
 
 # Charger .env avant les imports qui en dépendent
 load_dotenv()
@@ -134,10 +135,10 @@ def get_backup():
 
 @mcp.tool()
 async def memory_create(
-    memory_id: str,
-    name: str,
-    ontology: str,
-    description: Optional[str] = None
+    memory_id: Annotated[str, Field(description="Identifiant unique de la mémoire (ex: 'quoteflow-legal')")],
+    name: Annotated[str, Field(description="Nom lisible de la mémoire")],
+    ontology: Annotated[str, Field(description="Nom de l'ontologie à utiliser (ex: legal, cloud, managed-services, technical, presales)")],
+    description: Annotated[Optional[str], Field(default=None, description="Description optionnelle de la mémoire")] = None
 ) -> dict:
     """
     Crée une nouvelle mémoire (namespace isolé).
@@ -209,7 +210,9 @@ async def memory_create(
 
 
 @mcp.tool()
-async def memory_delete(memory_id: str) -> dict:
+async def memory_delete(
+    memory_id: Annotated[str, Field(description="ID de la mémoire à supprimer (⚠️ irréversible)")]
+) -> dict:
     """
     Supprime une mémoire et tout son contenu (graphe + S3).
     
@@ -289,7 +292,9 @@ async def memory_list() -> dict:
 
 
 @mcp.tool()
-async def memory_stats(memory_id: str) -> dict:
+async def memory_stats(
+    memory_id: Annotated[str, Field(description="ID de la mémoire")]
+) -> dict:
     """
     Récupère les statistiques d'une mémoire.
     
@@ -324,13 +329,13 @@ async def memory_stats(memory_id: str) -> dict:
 
 @mcp.tool()
 async def memory_ingest(
-    memory_id: str,
-    content_base64: str,
-    filename: str,
-    metadata: Optional[Dict[str, Any]] = None,
-    force: bool = False,
-    source_path: Optional[str] = None,
-    source_modified_at: Optional[str] = None,
+    memory_id: Annotated[str, Field(description="ID de la mémoire cible")],
+    content_base64: Annotated[str, Field(description="Contenu du document encodé en base64")],
+    filename: Annotated[str, Field(description="Nom du fichier (ex: 'contrat.pdf', 'notes.md')")],
+    metadata: Annotated[Optional[Dict[str, Any]], Field(default=None, description="Métadonnées additionnelles (clé/valeur libre)")] = None,
+    force: Annotated[bool, Field(default=False, description="Si true, réingère même si le document existe déjà (dédup SHA-256)")] = False,
+    source_path: Annotated[Optional[str], Field(default=None, description="Chemin d'origine du fichier (ex: 'legal/contracts/CGA.pdf')")] = None,
+    source_modified_at: Annotated[Optional[str], Field(default=None, description="Date de modification source ISO 8601 (ex: '2026-01-15T10:30:00')")] = None,
     ctx: Optional[Context] = None
 ) -> dict:
     """
@@ -705,9 +710,9 @@ def _extract_text(content: bytes, filename: str) -> Optional[str]:
 
 @mcp.tool()
 async def memory_search(
-    memory_id: str,
-    query: str,
-    limit: int = 10
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    query: Annotated[str, Field(description="Requête de recherche (texte libre)")],
+    limit: Annotated[int, Field(default=10, description="Nombre max de résultats (défaut: 10)")] = 10
 ) -> dict:
     """
     Recherche dans une mémoire (graph-first).
@@ -758,9 +763,9 @@ async def memory_search(
 
 @mcp.tool()
 async def question_answer(
-    memory_id: str,
-    question: str,
-    limit: int = 10
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    question: Annotated[str, Field(description="Question en langage naturel")],
+    limit: Annotated[int, Field(default=10, description="Nombre max d'entités à rechercher (défaut: 10)")] = 10
 ) -> dict:
     """
     Pose une question sur une mémoire et obtient une réponse basée sur le graphe.
@@ -962,9 +967,9 @@ CONSIGNES :
 
 @mcp.tool()
 async def memory_query(
-    memory_id: str,
-    query: str,
-    limit: int = 10
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    query: Annotated[str, Field(description="Requête en langage naturel")],
+    limit: Annotated[int, Field(default=10, description="Nombre max d'entités à rechercher (défaut: 10)")] = 10
 ) -> dict:
     """
     Interroge une mémoire et retourne les données structurées SANS génération LLM.
@@ -1119,9 +1124,9 @@ async def memory_query(
 
 @mcp.tool()
 async def memory_get_context(
-    memory_id: str,
-    entity_name: str,
-    depth: int = 1
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    entity_name: Annotated[str, Field(description="Nom exact de l'entité à explorer")],
+    depth: Annotated[int, Field(default=1, description="Profondeur de traversée du graphe (1 = voisins directs)")] = 1
 ) -> dict:
     """
     Récupère le contexte complet d'une entité.
@@ -1169,11 +1174,11 @@ async def memory_get_context(
 
 @mcp.tool()
 async def admin_create_token(
-    client_name: str,
-    permissions: Optional[List[str]] = None,
-    memory_ids: Optional[List[str]] = None,
-    expires_in_days: Optional[int] = None,
-    email: Optional[str] = None
+    client_name: Annotated[str, Field(description="Nom du client (ex: 'quoteflow', 'vela')")],
+    permissions: Annotated[Optional[List[str]], Field(default=None, description="Permissions : 'read', 'write', 'admin' (défaut: ['read', 'write'])")] = None,
+    memory_ids: Annotated[Optional[List[str]], Field(default=None, description="IDs des mémoires autorisées (vide = toutes)")] = None,
+    expires_in_days: Annotated[Optional[int], Field(default=None, description="Expiration en jours (optionnel, None = pas d'expiration)")] = None,
+    email: Annotated[Optional[str], Field(default=None, description="Adresse email du propriétaire du token")] = None
 ) -> dict:
     """
     Crée un nouveau token d'accès pour un client.
@@ -1248,7 +1253,9 @@ async def admin_list_tokens() -> dict:
 
 
 @mcp.tool()
-async def admin_revoke_token(token_hash_prefix: str) -> dict:
+async def admin_revoke_token(
+    token_hash_prefix: Annotated[str, Field(description="Début du hash du token à révoquer (8+ caractères)")]
+) -> dict:
     """
     Révoque un token.
     
@@ -1286,10 +1293,10 @@ async def admin_revoke_token(token_hash_prefix: str) -> dict:
 
 @mcp.tool()
 async def admin_update_token(
-    token_hash_prefix: str,
-    add_memories: Optional[List[str]] = None,
-    remove_memories: Optional[List[str]] = None,
-    set_memories: Optional[List[str]] = None
+    token_hash_prefix: Annotated[str, Field(description="Début du hash du token (8+ caractères)")],
+    add_memories: Annotated[Optional[List[str]], Field(default=None, description="Mémoires à ajouter (ex: ['JURIDIQUE', 'CLOUD'])")] = None,
+    remove_memories: Annotated[Optional[List[str]], Field(default=None, description="Mémoires à retirer (ex: ['JURIDIQUE'])")] = None,
+    set_memories: Annotated[Optional[List[str]], Field(default=None, description="Remplacer la liste (ex: ['CLOUD'], ou [] pour tout autoriser)")] = None
 ) -> dict:
     """
     Met à jour les mémoires autorisées d'un token.
@@ -1362,7 +1369,10 @@ async def admin_update_token(
 # =============================================================================
 
 @mcp.tool()
-async def memory_graph(memory_id: str, format: str = "full") -> dict:
+async def memory_graph(
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    format: Annotated[str, Field(default="full", description="Format : 'full' (tout), 'nodes', 'edges', 'documents'")] = "full"
+) -> dict:
     """
     Récupère le graphe complet d'une mémoire (entités, relations et documents).
     
@@ -1424,7 +1434,9 @@ async def memory_graph(memory_id: str, format: str = "full") -> dict:
 
 
 @mcp.tool()
-async def document_list(memory_id: str) -> dict:
+async def document_list(
+    memory_id: Annotated[str, Field(description="ID de la mémoire")]
+) -> dict:
     """
     Liste tous les documents d'une mémoire.
     
@@ -1450,9 +1462,9 @@ async def document_list(memory_id: str) -> dict:
 
 @mcp.tool()
 async def document_get(
-    memory_id: str,
-    document_id: str,
-    include_content: bool = False
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    document_id: Annotated[str, Field(description="ID du document (UUID)")],
+    include_content: Annotated[bool, Field(default=False, description="Si true, télécharge et inclut le contenu S3 (lent)")] = False
 ) -> dict:
     """
     Récupère les métadonnées d'un document, et optionnellement son contenu.
@@ -1506,7 +1518,10 @@ async def document_get(
 
 
 @mcp.tool()
-async def document_delete(memory_id: str, document_id: str) -> dict:
+async def document_delete(
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    document_id: Annotated[str, Field(description="ID du document à supprimer (UUID)")]
+) -> dict:
     """
     Supprime un document du graphe ET de S3.
     
@@ -1598,7 +1613,9 @@ async def ontology_list() -> dict:
 
 
 @mcp.tool()
-async def storage_check(memory_id: Optional[str] = None) -> dict:
+async def storage_check(
+    memory_id: Annotated[Optional[str], Field(default=None, description="ID d'une mémoire spécifique (optionnel, toutes si omis)")] = None
+) -> dict:
     """
     Vérifie la cohérence entre le graphe Neo4j et le stockage S3.
     
@@ -1758,7 +1775,9 @@ async def storage_check(memory_id: Optional[str] = None) -> dict:
 
 
 @mcp.tool()
-async def storage_cleanup(dry_run: bool = True) -> dict:
+async def storage_cleanup(
+    dry_run: Annotated[bool, Field(default=True, description="Si true, liste seulement. Si false, supprime réellement les orphelins")] = True
+) -> dict:
     """
     Nettoie les fichiers orphelins sur S3.
     
@@ -2005,8 +2024,8 @@ async def system_health() -> dict:
 
 @mcp.tool()
 async def backup_create(
-    memory_id: str,
-    description: Optional[str] = None,
+    memory_id: Annotated[str, Field(description="ID de la mémoire à sauvegarder")],
+    description: Annotated[Optional[str], Field(default=None, description="Description optionnelle du backup")] = None,
     ctx: Optional[Context] = None
 ) -> dict:
     """
@@ -2050,7 +2069,9 @@ async def backup_create(
 
 
 @mcp.tool()
-async def backup_list(memory_id: Optional[str] = None) -> dict:
+async def backup_list(
+    memory_id: Annotated[Optional[str], Field(default=None, description="Filtrer par mémoire (optionnel, tous si omis)")] = None
+) -> dict:
     """
     Liste les backups disponibles sur S3.
     
@@ -2086,7 +2107,7 @@ async def backup_list(memory_id: Optional[str] = None) -> dict:
 
 @mcp.tool()
 async def backup_restore(
-    backup_id: str,
+    backup_id: Annotated[str, Field(description="ID du backup (format: 'memory_id/timestamp')")],
     ctx: Optional[Context] = None
 ) -> dict:
     """
@@ -2133,8 +2154,8 @@ async def backup_restore(
 
 @mcp.tool()
 async def backup_download(
-    backup_id: str,
-    include_documents: bool = False,
+    backup_id: Annotated[str, Field(description="ID du backup (format: 'memory_id/timestamp')")],
+    include_documents: Annotated[bool, Field(default=False, description="Si true, inclut les documents originaux (PDF, DOCX, etc.)")] = False,
     ctx: Optional[Context] = None
 ) -> dict:
     """
@@ -2192,7 +2213,9 @@ async def backup_download(
 
 
 @mcp.tool()
-async def backup_delete(backup_id: str) -> dict:
+async def backup_delete(
+    backup_id: Annotated[str, Field(description="ID du backup à supprimer (format: 'memory_id/timestamp')")]
+) -> dict:
     """
     Supprime un backup de S3.
     
@@ -2221,7 +2244,7 @@ async def backup_delete(backup_id: str) -> dict:
 
 @mcp.tool()
 async def backup_restore_archive(
-    archive_base64: str,
+    archive_base64: Annotated[str, Field(description="Contenu de l'archive tar.gz encodé en base64")],
     ctx: Optional[Context] = None
 ) -> dict:
     """
