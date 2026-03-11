@@ -2,57 +2,53 @@
 
 ## Contexte actuel (11 mars 2026)
 
-### Focus : Ontologie software-development v1.2
+### Focus : Isolation multi-tenant v1.6.0
 
-Nouvelle ontologie créée, testée, auditée et itérée pour l'ingestion de code source dans graph-memory.
+Audit de sécurité complet du système d'authentification et d'isolation des données. **14 failles corrigées**, recette automatisée de 119 tests, promotion admin déléguée.
 
-**Ontologie v1.2** — `ONTOLOGIES/software-development.yaml` :
-- 21 types d'entités (Package, Module, Layer, Class, Function, Middleware, DataModel, Enum, MCPTool, APIEndpoint, Protocol, ExternalService, Dependency, ConfigParameter, DesignPattern, Algorithm, TestCase, Documentation, Feature, InfraComponent, SecurityBoundary)
-- 23 types de relations (CONTAINS, PART_OF, BELONGS_TO_LAYER, DEPENDS_ON, IMPORTS, USES, CALLS, INHERITS_FROM, IMPLEMENTS, RETURNS, ACCEPTS, PRODUCES, STORES_IN, EXPOSES, DELEGATES_TO, UPDATES, READS, CONFIGURED_BY, TESTED_BY, DOCUMENTED_IN, IMPLEMENTS_FEATURE, PROTECTS, ROUTES_TO)
+### Changements majeurs v1.6.0
 
-### Évolutions v1.0 → v1.1 → v1.2
+**Sécurité (14 failles corrigées)** :
+- `memory_list`, `backup_list` → filtrés par `memory_ids` du token
+- `memory_create` → auto-ajout au token après création (permet aux clients restreints de créer)
+- `memory_delete`, `memory_ingest` → `check_write_permission()` ajouté
+- `document_list`, `document_get` → `check_memory_access()` ajouté
+- 4 outils `admin_*` → `check_admin_permission()` ajouté (empêche escalade de privilèges)
+- `storage_check` (global), `storage_cleanup` → admin requis
+- `backup_restore_archive` → vérification memory_id dans le manifest
 
-- **v1.0** : Création initiale (19 entités, 19 relations)
-- **v1.1** : Post-audit — +UPDATES, +READS, 12 mappings obligatoires (EXECUTES→CALLS, etc.), nommage canonique pour fusion cross-docs, anti-hub rules, connectivité minimum ≥2, zéro "Other"
-- **v1.2** : Post-analyse DESIGN — +InfraComponent, +SecurityBoundary, +PROTECTS, +ROUTES_TO pour couvrir l'architecture d'infrastructure et la sécurité (~95% de SPECIFICATION.md)
+**Nouvelles fonctions auth** (`auth/context.py`) :
+- `check_admin_permission()` — garde pour outils admin
+- `get_allowed_memory_ids()` — filtre les résultats par token
 
-### Résultats du test sur QuoteFlow (backend Python/FastAPI)
+**Promotion admin déléguée** :
+- `update_token_permissions()` dans `token_manager.py`
+- `set_permissions` dans `admin_update_token` → promouvoir/rétrograder des tokens
+- Chaîne de confiance : bootstrap → admin délégué → sous-tokens
 
-Audit sur 10 documents ingérés (v1.1) :
-- 965 entités, 910 relations
-- 99% conformité entités (1 seul type "Other")
-- 95% conformité relations (12 types inventés → corrigés en v1.1 avec mappings)
-- 33% orphelins (objectif <20% avec v1.2)
-- 0% fusion cross-docs (objectif >10% avec nommage canonique v1.1)
+**Recette complète** (`scripts/test_recette.py`) :
+- 119 tests, 7 phases, 7 modules (<120 lignes chacun)
+- 3 profils : admin, read/write restreint, read-only
+- Teste tous les 28 outils MCP + isolation + déduplication SHA-256
 
-### Outils créés
+**Scripts nettoyés** :
+- 7 scripts obsolètes supprimés (analyze_*.py, test_ontology.py, test_service.py, view_graph.py, ingest_quoteflow.*)
+- README scripts mis à jour (fr + en)
 
-- `scripts/audit_ontology.py` — Audit qualité du graphe (distribution types, hubs, orphelins, fusion, nommage)
-- `scripts/ingest_quoteflow.sh` — Ingestion en masse d'un projet complet (189 fichiers QuoteFlow)
-- `scripts/test_ontology.py` — Script de test MCP (non utilisé, remplacé par CLI)
+### Contexte précédent (v1.5.0)
 
-### Documentation mise à jour
+Ontologie `software-development` v1.2 pour l'ingestion de code source :
+- 21 types d'entités + 23 types de relations
+- Test QuoteFlow : 965 entités, 910 relations, 99% conformité
 
-- VERSION bumpé 1.4.1 → 1.5.0
-- CHANGELOG.md — Entrée v1.5.0 complète
-- DESIGN/SPECIFICATION.md — Table ontologies §7.2, listing §15, "6 ontologies", footer v1.5.0
-- README.md / README.en.md — Changelog factorisé → pointeur CHANGELOG.md, "6 ontologies"
+### Décisions actives
 
-### Ingestion en cours
+- **memory_ids vide = accès à toutes les mémoires** : c'est le comportement par défaut pour un token. L'admin doit explicitement restreindre les memory_ids pour isoler un client.
+- **Auto-ajout au token lors de memory_create** : un client restreint qui crée une mémoire la voit automatiquement ajoutée à son token. Cela évite de devoir faire un round-trip admin.
+- **Localhost exempt d'auth pour MCP** : les requêtes depuis 127.0.0.1 n'ont pas besoin de token (sauf /api/*). Décision de design pour faciliter le développement.
 
-L'ingestion v1.2 de QuoteFlow (189 fichiers) est en cours en arrière-plan.
-Suivi : `tail -f scripts/ingest_quoteflow.log`
+### Prochaines étapes possibles
 
-### Prochaines étapes
-
-1. Attendre la fin de l'ingestion QuoteFlow et refaire un audit v1.2
-2. Comparer les métriques v1.1 vs v1.2 (orphelins, fusion, types inventés)
-3. Auto-ingérer graph-memory dans graph-memory (cas d'usage premier de l'ontologie)
-4. Tester l'ingestion de code JavaScript/JSX (frontend QuoteFlow)
-
-### Décisions importantes
-
-- Le nommage canonique (format strict par type) est la clé de la fusion cross-documents
-- Les mappings obligatoires dans `special_instructions` sont essentiels pour guider le LLM
-- L'ontologie code source utilise des limites plus élevées (160/240 vs 60/80) car le code est plus dense
-- Les types InfraComponent et SecurityBoundary couvrent l'architecture de déploiement manquante
+- Tester en production (déploiement Docker)
+- Ajouter des tests d'expiration de tokens
+- Considérer le rate-limiting par token (pas seulement par IP)

@@ -251,7 +251,16 @@ python scripts/mcp_cli.py token ungrant <hash> JURIDIQUE
 # Remplacer toute la liste des mémoires (vide = accès à toutes)
 python scripts/mcp_cli.py token set-memories <hash> JURIDIQUE CLOUD
 python scripts/mcp_cli.py token set-memories <hash>   # Accès à toutes
+
+# Promouvoir/rétrograder les permissions d'un token
+python scripts/mcp_cli.py token promote <hash> admin,read,write  # Promouvoir en admin
+python scripts/mcp_cli.py token promote <hash> read,write         # Rétrograder en client normal
+python scripts/mcp_cli.py token promote <hash> read                # Passer en read-only
 ```
+
+> **Note v1.6.0** : Un token avec la permission `admin` a les mêmes droits que la bootstrap key :
+> il peut créer/révoquer des tokens, gérer les permissions, accéder à toutes les mémoires et utiliser les outils de diagnostic globaux.
+> **Chaîne de confiance** : bootstrap → admin délégué → sous-tokens.
 
 **Options de `document ingest` :**
 
@@ -338,6 +347,7 @@ Fonctionnalités :
 | `token-grant <hash> <mem1> [mem2]`                        | Ajouter des mémoires à un token                  |
 | `token-ungrant <hash> <mem1> [mem2]`                      | Retirer des mémoires                             |
 | `token-set <hash> [mem1] [mem2]`                          | Remplacer les mémoires (vide = toutes)           |
+| `token-promote <hash> <perms>`                            | Modifier les permissions (admin, read, write)    |
 
 #### 💾 Backup / Restore
 
@@ -370,6 +380,7 @@ Fonctionnalités :
 🧠 no memory: token-create quoteflow read,write JURIDIQUE,CLOUD
 🧠 no memory: token-revoke e4914bbb828ae97fa25c9adf0cc229273dff401b088cb2aaac900bfa1c650a24
 🧠 no memory: token-grant e4914bbb... JURIDIQUE CLOUD
+🧠 no memory: token-promote e4914bbb... admin,read,write
 ```
 
 #### Configuration
@@ -399,21 +410,32 @@ Ajoutez `--json` à n'importe quelle commande de consultation pour obtenir le JS
 
 ---
 
-## Architecture CLI
+## Architecture
 
 ```
 scripts/
-├── mcp_cli.py            # Point d'entrée (Click)
-├── README.md             # Ce fichier
-├── cleanup_and_reingest.py  # Utilitaire de ré-ingestion
-├── view_graph.py         # Visualisation graphe en terminal
-└── cli/
-    ├── __init__.py       # Configuration (URL, token)
-    ├── client.py         # Client Streamable HTTP vers le serveur MCP
-    ├── ingest_progress.py # Progression ingestion temps réel partagée (Rich Live + Streamable HTTP)
-    ├── commands.py       # Commandes Click (mode scriptable)
-    ├── display.py        # Affichage Rich (tables, panels, graphe, tokens)
-    └── shell.py          # Shell interactif prompt_toolkit
+├── mcp_cli.py                   # Point d'entrée CLI (Click)
+├── README.md                    # Ce fichier
+├── README.en.md                 # Version anglaise
+├── test_recette.py              # Recette complète (119 tests, 7 phases)
+├── audit_ontology.py            # Audit qualité ontologie sur une mémoire
+├── check_param_descriptions.py  # Vérification descriptions paramètres MCP
+├── cli/                         # Package CLI
+│   ├── __init__.py              # Configuration (URL, token)
+│   ├── client.py                # Client Streamable HTTP vers le serveur MCP
+│   ├── ingest_progress.py       # Progression ingestion temps réel (Rich Live)
+│   ├── commands.py              # Commandes Click (mode scriptable)
+│   ├── display.py               # Affichage Rich (tables, panels, graphe, tokens)
+│   └── shell.py                 # Shell interactif prompt_toolkit
+└── tests/                       # Modules de test (recette)
+    ├── __init__.py              # Framework de test (helpers, compteurs)
+    ├── test_system.py           # Tests système (health, about, ontology)
+    ├── test_tokens.py           # Tests tokens (CRUD, isolation, promotion admin)
+    ├── test_memories.py         # Tests mémoires (CRUD, auto-ajout, isolation)
+    ├── test_documents.py        # Tests documents (ingest, list, get, delete, dédup)
+    ├── test_search.py           # Tests recherche (search, Q&A, query, context, graph)
+    ├── test_backup.py           # Tests backup/storage (CRUD, check, cleanup)
+    └── test_cleanup.py          # Tests suppression + nettoyage
 ```
 
 ### Client MCP (`client.py`)
@@ -471,4 +493,4 @@ pip install httpx click rich prompt_toolkit
 
 ---
 
-*Graph Memory CLI v1.3.6 — Février 2026*
+*Graph Memory CLI v1.6.0 — Mars 2026*

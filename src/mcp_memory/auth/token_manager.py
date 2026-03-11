@@ -316,6 +316,64 @@ class TokenManager:
                 "current_memories": new_memories
             }
     
+    async def update_token_permissions(
+        self,
+        token_hash: str,
+        permissions: List[str]
+    ) -> Optional[dict]:
+        """
+        Met à jour les permissions d'un token.
+        
+        Permet de promouvoir un token en admin ou de le rétrograder.
+        Permissions valides : 'read', 'write', 'admin'.
+        
+        Args:
+            token_hash: Hash complet du token
+            permissions: Nouvelle liste de permissions (ex: ["admin", "read", "write"])
+            
+        Returns:
+            Dict avec les anciennes et nouvelles permissions, ou None si token non trouvé
+        """
+        # Valider les permissions
+        valid_permissions = {"read", "write", "admin"}
+        invalid = set(permissions) - valid_permissions
+        if invalid:
+            raise ValueError(f"Permissions invalides: {invalid}. Valides: {valid_permissions}")
+        
+        async with self.graph.session() as session:
+            # Récupérer le token
+            result = await session.run(
+                "MATCH (t:Token {hash: $hash, is_active: true}) RETURN t",
+                hash=token_hash
+            )
+            record = await result.single()
+            
+            if not record:
+                return None
+            
+            node = record["t"]
+            previous_permissions = list(node.get("permissions", []))
+            
+            # Mettre à jour dans Neo4j
+            await session.run(
+                """
+                MATCH (t:Token {hash: $hash})
+                SET t.permissions = $permissions, t.updated_at = datetime()
+                """,
+                hash=token_hash,
+                permissions=permissions
+            )
+            
+            action = "promu admin" if "admin" in permissions and "admin" not in previous_permissions else "mis à jour"
+            print(f"🔑 [Auth] Token {token_hash[:8]}... permissions {action}: {permissions}", file=sys.stderr)
+            
+            return {
+                "token_hash": token_hash,
+                "client_name": node["client_name"],
+                "previous_permissions": previous_permissions,
+                "current_permissions": permissions
+            }
+    
     async def check_permission(
         self,
         token_info: TokenInfo,

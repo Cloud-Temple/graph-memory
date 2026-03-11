@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v1.5.0).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v1.6.0).
 
-**Latest**: v1.5.0 (March 11, 2026) — New `software-development` ontology v1.2 (21 entity types, 23 relation types) for source code ingestion.
+**Latest**: v1.6.0 (March 11, 2026) — Hardened multi-tenant isolation (14 security fixes), delegated admin promotion, comprehensive 119-test acceptance suite.
 
 ---
 
@@ -58,7 +58,7 @@ Question (natural language)
 - **Complete CLI** — Click (scriptable) + interactive shell with autocompletion
 - **Backup/Restore** — full 3-layer backup (Neo4j + Qdrant + S3) with tar.gz archive support
 - **Multi-tenant** — namespace isolation per memory in Neo4j
-- **Security** — Coraza WAF, Bearer Token auth, rate limiting, non-root container, isolated Docker network
+- **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.0), admin delegation, rate limiting, non-root container, isolated Docker network, **119 automated tests**
 - **Formats** — PDF, DOCX, Markdown, TXT, HTML, CSV
 
 ---

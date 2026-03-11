@@ -73,6 +73,69 @@ def check_memory_access(memory_id: str) -> Optional[dict]:
     return None  # Autorisé
 
 
+def check_admin_permission() -> Optional[dict]:
+    """
+    Vérifie si le contexte d'auth actuel a la permission admin.
+    
+    Règles :
+    - Pas d'auth (localhost, public) → autorisé (accès libre)
+    - Permission "admin" → autorisé
+    - Bootstrap key → autorisé
+    - Sinon → refusé
+    
+    Returns:
+        None si autorisé, dict d'erreur si refusé
+    """
+    auth = current_auth.get()
+    
+    # Pas d'auth = accès libre (localhost)
+    if auth is None:
+        return None
+    
+    # Bootstrap = admin
+    if auth.get("type") == "bootstrap":
+        return None
+    
+    permissions = auth.get("permissions", [])
+    if "admin" in permissions:
+        return None
+    
+    client = auth.get("client_name", "inconnu")
+    return {
+        "status": "error",
+        "message": (
+            f"Accès refusé: le token du client '{client}' "
+            f"n'a pas la permission 'admin'. "
+            f"Cette opération est réservée aux administrateurs."
+        )
+    }
+
+
+def get_allowed_memory_ids() -> Optional[list]:
+    """
+    Retourne la liste des memory_ids autorisés pour le contexte d'auth actuel.
+    
+    Returns:
+        None si pas d'auth ou admin/bootstrap (= pas de restriction)
+        [] si memory_ids vide dans le token (= toutes les mémoires autorisées)
+        ["A", "B"] si restriction à des mémoires spécifiques
+    """
+    auth = current_auth.get()
+    
+    # Pas d'auth = accès libre
+    if auth is None:
+        return None
+    
+    # Admin ou bootstrap = accès total (pas de filtrage)
+    if auth.get("type") == "bootstrap":
+        return None
+    if "admin" in auth.get("permissions", []):
+        return None
+    
+    # Retourner la liste (peut être [] = toutes)
+    return auth.get("memory_ids", [])
+
+
 def check_write_permission() -> Optional[dict]:
     """
     Vérifie si le contexte d'auth actuel a la permission d'écriture.

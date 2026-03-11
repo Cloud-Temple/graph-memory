@@ -2,6 +2,17 @@
 
 ## Ce qui fonctionne ✅
 
+### Isolation multi-tenant v1.6.0 (2026-03-11)
+- **14 failles de sécurité corrigées** — audit complet du système d'authentification et d'isolation
+- **Contrôles d'accès sur 28 outils MCP** : `check_memory_access()`, `check_write_permission()`, `check_admin_permission()` appliqués systématiquement
+- **Filtrage multi-tenant** : `memory_list`, `backup_list` filtrés par `memory_ids` du token ; `document_list`, `document_get` protégés
+- **Outils admin protégés** : `admin_create_token`, `admin_list_tokens`, `admin_revoke_token`, `admin_update_token` → `check_admin_permission()` requis
+- **Promotion admin déléguée** : `update_token_permissions()` + `set_permissions` dans `admin_update_token` ; chaîne de confiance bootstrap → admin délégué → sous-tokens
+- **Auto-ajout au token** : `memory_create` ajoute automatiquement la mémoire aux `memory_ids` du token créateur
+- **Recette complète** : `scripts/test_recette.py` — 119 tests, 7 phases, 7 modules, 3 profils (admin, read/write, read-only) — **119/119 PASS en 31s**
+- **Scripts nettoyés** : 7 scripts obsolètes supprimés (analyze_*.py, test_ontology.py, test_service.py, view_graph.py, ingest_quoteflow.*)
+- **Documentation mise à jour** : CHANGELOG, README (fr+en), scripts/README (fr+en), memory bank
+
 ### Ontologie software-development v1.2 (2026-03-11)
 - **Nouvelle ontologie `software-development`** pour l'ingestion de code source — 21 types d'entités + 23 types de relations
 - **Types d'entités** : Package, Module, Layer, Class, Function, Middleware, DataModel, Enum, MCPTool, APIEndpoint, Protocol, ExternalService, Dependency, ConfigParameter, DesignPattern, Algorithm, TestCase, Documentation, Feature, InfraComponent, SecurityBoundary

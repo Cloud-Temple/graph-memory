@@ -954,6 +954,39 @@ def token_set_memories(ctx, hash_prefix, memory_ids):
     asyncio.run(_run())
 
 
+@token.command("promote")
+@click.argument("hash_prefix")
+@click.argument("permissions")
+@click.pass_context
+def token_promote(ctx, hash_prefix, permissions):
+    """🔑 Modifier les permissions d'un token (promouvoir/rétrograder).
+
+    \b
+    PERMISSIONS est une liste séparée par des virgules : read,write,admin
+
+    \b
+    Exemples:
+      token promote abc12345 admin,read,write   # Promouvoir en admin
+      token promote abc12345 read,write          # Rétrograder en client normal
+      token promote abc12345 read                 # Passer en read-only
+    """
+    async def _run():
+        try:
+            perms_list = [p.strip() for p in permissions.split(",")]
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("admin_update_token", {
+                "token_hash_prefix": hash_prefix,
+                "set_permissions": perms_list,
+            })
+            if result.get("status") == "ok":
+                show_token_updated(result)
+            else:
+                show_error(result.get("message", str(result)))
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
 # =============================================================================
 # Backup / Restore
 # =============================================================================

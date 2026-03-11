@@ -66,9 +66,9 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.5.0).
+Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.6.0).
 
-**Dernière version** : v1.5.0 (11 mars 2026) — Nouvelle ontologie `software-development` v1.2 (21 entités, 23 relations) pour l'ingestion de code source.
+**Dernière version** : v1.6.0 (11 mars 2026) — Isolation multi-tenant durcie (14 failles corrigées), promotion admin déléguée, recette complète 119 tests.
 
 ---
 
@@ -157,8 +157,11 @@ Question en langage naturel
 
 ### Sécurité
 - Authentification Bearer Token pour toutes les requêtes MCP
-- Clé bootstrap pour le premier token
+- Clé bootstrap pour le premier token + **promotion admin déléguée** (v1.6.0)
+- **Isolation multi-tenant durcie** (v1.6.0) : chaque token ne voit/modifie que ses mémoires autorisées
 - Isolation des données par mémoire (namespace Neo4j)
+- **14 contrôles d'accès** sur les 28 outils MCP (access, write, admin)
+- **Recette automatisée** : 119 tests × 3 profils (admin, read/write, read-only)
 
 ---
 
@@ -728,7 +731,8 @@ graph-memory/
 │
 ├── scripts/                  # CLI et utilitaires
 │   ├── mcp_cli.py            # Point d'entrée CLI (Click + Shell)
-│   ├── test_service.py       # Test end-to-end officiel (27 tests, 9 catégories)
+│   ├── test_recette.py       # Recette complète (119 tests, 7 phases, 3 profils)
+│   ├── tests/                # Modules de test modulaires (7 fichiers)
 │   ├── README.md             # Documentation CLI
 │   ├── view_graph.py         # Visualisation graphe en terminal
 │   └── cli/                  # Package CLI
@@ -881,4 +885,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v1.5.0 — Mars 2026*
+*Graph Memory v1.6.0 — Mars 2026*

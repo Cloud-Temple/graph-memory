@@ -24,7 +24,7 @@ from mcp.server.fastmcp import FastMCP, Context
 
 from .config import get_settings
 from .auth.middleware import AuthMiddleware, LoggingMiddleware, StaticFilesMiddleware
-from .auth.context import check_memory_access, check_write_permission, current_auth
+from .auth.context import check_memory_access, check_write_permission, check_admin_permission, get_allowed_memory_ids, current_auth
 
 
 # =============================================================================
@@ -155,10 +155,33 @@ async def memory_create(
         Informations sur la mémoire créée
     """
     try:
-        # Vérifier l'accès à la mémoire
-        access_err = check_memory_access(memory_id)
-        if access_err:
-            return access_err
+        # Vérifier la permission d'écriture
+        write_err = check_write_permission()
+        if write_err:
+            return write_err
+        
+        # Pour memory_create, on vérifie l'accès SAUF si le token a des memory_ids
+        # restreints et que la nouvelle mémoire n'y est pas encore (elle sera auto-ajoutée)
+        auth = current_auth.get()
+        _auto_add_to_token = False
+        if auth and auth.get("type") == "token":
+            allowed = auth.get("memory_ids", [])
+            if allowed and memory_id not in allowed:
+                # Token restreint, la mémoire n'est pas dans la liste
+                # → On autorise la création et on l'ajoutera automatiquement au token
+                _auto_add_to_token = True
+                print(f"🔑 [Auth] memory_create: '{memory_id}' sera auto-ajouté au token de '{auth.get('client_name')}'", file=sys.stderr)
+            elif not allowed:
+                # memory_ids vide = accès à tout → pas besoin d'auto-add
+                pass
+            else:
+                # La mémoire est déjà dans la liste → OK
+                pass
+        else:
+            # Pas de token restreint → vérification standard
+            access_err = check_memory_access(memory_id)
+            if access_err:
+                return access_err
         
         # Vérifier que l'ontologie existe et la récupérer
         from .core.ontology import get_ontology_manager
@@ -195,6 +218,20 @@ async def memory_create(
             ontology_uri=ontology_s3_result["uri"]
         )
         
+        # Auto-ajouter la mémoire au token si nécessaire (isolation multi-tenant)
+        if _auto_add_to_token and auth and auth.get("token_hash"):
+            try:
+                await get_tokens().update_token_memories(
+                    token_hash=auth["token_hash"],
+                    add_memories=[memory_id]
+                )
+                # Mettre à jour le contexte auth en mémoire pour la session courante
+                auth["memory_ids"].append(memory_id)
+                current_auth.set(auth)
+                print(f"🔑 [Auth] memory_create: '{memory_id}' auto-ajouté au token de '{auth.get('client_name')}'", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ [Auth] Impossible d'auto-ajouter '{memory_id}' au token: {e}", file=sys.stderr)
+        
         return {
             "status": "created",
             "memory_id": memory.id,
@@ -226,10 +263,13 @@ async def memory_delete(
         Statut de la suppression avec détails S3
     """
     try:
-        # Vérifier l'accès à la mémoire
+        # Vérifier l'accès à la mémoire + permission write
         access_err = check_memory_access(memory_id)
         if access_err:
             return access_err
+        write_err = check_write_permission()
+        if write_err:
+            return write_err
         
         # 1. Supprimer la collection Qdrant (couplage strict)
         qdrant_deleted = False
@@ -266,13 +306,25 @@ async def memory_delete(
 @mcp.tool()
 async def memory_list() -> dict:
     """
-    Liste toutes les mémoires disponibles.
+    Liste les mémoires accessibles au client.
+    
+    Un client non-admin ne voit que les mémoires autorisées par son token.
+    Un admin ou un accès localhost voit toutes les mémoires.
     
     Returns:
         Liste des mémoires avec leurs métadonnées
     """
     try:
         memories = await get_graph().list_memories()
+        
+        # Filtrer par les mémoires autorisées (isolation multi-tenant)
+        allowed = get_allowed_memory_ids()
+        if allowed is not None and len(allowed) > 0:
+            # Token restreint : ne montrer que les mémoires autorisées
+            memories = [m for m in memories if m.id in allowed]
+        # allowed is None → admin/bootstrap/localhost → pas de filtrage
+        # allowed == [] → token sans restriction → pas de filtrage
+        
         return {
             "status": "ok",
             "count": len(memories),
@@ -391,10 +443,13 @@ async def memory_ingest(
                 except Exception:
                     pass
         
-        # Vérifier l'accès à la mémoire
+        # Vérifier l'accès à la mémoire + permission write
         access_err = check_memory_access(memory_id)
         if access_err:
             return access_err
+        write_err = check_write_permission()
+        if write_err:
+            return write_err
         
         # Décoder le contenu (libérer content_base64 ensuite — peut être volumineux)
         content = base64.b64decode(content_base64)
@@ -1196,6 +1251,11 @@ async def admin_create_token(
         Token généré (à conserver précieusement)
     """
     try:
+        # Sécurité : permission admin requise
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+        
         token = await get_tokens().create_token(
             client_name=client_name,
             permissions=permissions or ["read", "write"],
@@ -1229,6 +1289,11 @@ async def admin_list_tokens() -> dict:
         Liste des tokens avec leurs infos
     """
     try:
+        # Sécurité : permission admin requise
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+        
         tokens = await get_tokens().list_tokens()
         
         return {
@@ -1266,6 +1331,11 @@ async def admin_revoke_token(
         Statut de la révocation
     """
     try:
+        # Sécurité : permission admin requise
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+        
         # Trouver le token par son préfixe
         tokens = await get_tokens().list_tokens(include_revoked=False)
         
@@ -1296,26 +1366,39 @@ async def admin_update_token(
     token_hash_prefix: Annotated[str, Field(description="Début du hash du token (8+ caractères)")],
     add_memories: Annotated[Optional[List[str]], Field(default=None, description="Mémoires à ajouter (ex: ['JURIDIQUE', 'CLOUD'])")] = None,
     remove_memories: Annotated[Optional[List[str]], Field(default=None, description="Mémoires à retirer (ex: ['JURIDIQUE'])")] = None,
-    set_memories: Annotated[Optional[List[str]], Field(default=None, description="Remplacer la liste (ex: ['CLOUD'], ou [] pour tout autoriser)")] = None
+    set_memories: Annotated[Optional[List[str]], Field(default=None, description="Remplacer la liste (ex: ['CLOUD'], ou [] pour tout autoriser)")] = None,
+    set_permissions: Annotated[Optional[List[str]], Field(default=None, description="Remplacer les permissions (ex: ['admin', 'read', 'write'] pour promouvoir en admin)")] = None
 ) -> dict:
     """
-    Met à jour les mémoires autorisées d'un token.
+    Met à jour les mémoires autorisées et/ou les permissions d'un token.
     
-    Trois modes (mutuellement exclusifs avec set_memories) :
+    Gestion des mémoires (mutuellement exclusifs avec set_memories) :
     - add_memories: Ajoute des mémoires à la liste existante
     - remove_memories: Retire des mémoires de la liste existante
     - set_memories: Remplace toute la liste ([] = accès à TOUTES les mémoires)
+    
+    Gestion des permissions :
+    - set_permissions: Remplace les permissions (ex: ["admin", "read", "write"] pour promouvoir en admin)
+    
+    Permissions valides : 'read', 'write', 'admin'.
+    Un token avec la permission 'admin' a accès à TOUS les outils, y compris la gestion des tokens.
     
     Args:
         token_hash_prefix: Début du hash du token (8+ caractères)
         add_memories: Mémoires à ajouter (ex: ["JURIDIQUE", "CLOUD"])
         remove_memories: Mémoires à retirer (ex: ["JURIDIQUE"])
         set_memories: Remplacer toute la liste (ex: ["CLOUD"], ou [] pour tout autoriser)
+        set_permissions: Remplacer les permissions (ex: ["admin", "read", "write"])
         
     Returns:
-        Anciennes et nouvelles mémoires autorisées
+        Anciennes et nouvelles mémoires/permissions autorisées
     """
     try:
+        # Sécurité : permission admin requise
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+        
         # Trouver le token par son préfixe
         tokens = await get_tokens().list_tokens(include_revoked=False)
         matching = [t for t in tokens if t.token_hash.startswith(token_hash_prefix)]
@@ -1326,39 +1409,76 @@ async def admin_update_token(
         if len(matching) > 1:
             return {"status": "error", "message": "Préfixe ambigu, soyez plus précis"}
         
-        # Vérifier que les mémoires existent (si on en ajoute)
-        memories_to_check = (add_memories or []) + (set_memories or [])
-        if memories_to_check:
-            existing_memories = await get_graph().list_memories()
-            existing_ids = {m.id for m in existing_memories}
-            unknown = [m for m in memories_to_check if m not in existing_ids]
-            if unknown:
+        result_parts = {}
+        
+        # === Mise à jour des permissions (si demandé) ===
+        if set_permissions is not None:
+            valid_perms = {"read", "write", "admin"}
+            invalid = set(set_permissions) - valid_perms
+            if invalid:
                 return {
                     "status": "error",
-                    "message": f"Mémoires inconnues: {unknown}. Disponibles: {sorted(existing_ids)}"
+                    "message": f"Permissions invalides: {invalid}. Valides: {sorted(valid_perms)}"
                 }
+            
+            perm_result = await get_tokens().update_token_permissions(
+                token_hash=matching[0].token_hash,
+                permissions=set_permissions
+            )
+            if perm_result:
+                result_parts["previous_permissions"] = perm_result["previous_permissions"]
+                result_parts["current_permissions"] = perm_result["current_permissions"]
         
-        # Mettre à jour
-        result = await get_tokens().update_token_memories(
-            token_hash=matching[0].token_hash,
-            add_memories=add_memories,
-            remove_memories=remove_memories,
-            set_memories=set_memories
-        )
+        # === Mise à jour des mémoires (si demandé) ===
+        has_memory_update = add_memories or remove_memories or set_memories is not None
+        if has_memory_update:
+            # Vérifier que les mémoires existent (si on en ajoute)
+            memories_to_check = (add_memories or []) + (set_memories or []) if set_memories is not None else (add_memories or [])
+            if memories_to_check:
+                existing_memories = await get_graph().list_memories()
+                existing_ids = {m.id for m in existing_memories}
+                unknown = [m for m in memories_to_check if m not in existing_ids]
+                if unknown:
+                    return {
+                        "status": "error",
+                        "message": f"Mémoires inconnues: {unknown}. Disponibles: {sorted(existing_ids)}"
+                    }
+            
+            mem_result = await get_tokens().update_token_memories(
+                token_hash=matching[0].token_hash,
+                add_memories=add_memories,
+                remove_memories=remove_memories,
+                set_memories=set_memories
+            )
+            if mem_result:
+                result_parts["previous_memories"] = mem_result["previous_memories"]
+                result_parts["current_memories"] = mem_result["current_memories"]
         
-        if result:
-            return {
-                "status": "ok",
-                "client_name": result["client_name"],
-                "token_hash_prefix": result["token_hash"][:8] + "...",
-                "previous_memories": result["previous_memories"],
-                "current_memories": result["current_memories"],
-                "message": (
-                    "Accès à toutes les mémoires" if not result["current_memories"]
-                    else f"Accès restreint à: {result['current_memories']}"
-                )
-            }
-        return {"status": "error", "message": "Token non trouvé ou inactif"}
+        if not result_parts:
+            return {"status": "error", "message": "Aucune modification demandée (spécifiez set_permissions, add_memories, remove_memories ou set_memories)"}
+        
+        # Construire le message
+        messages = []
+        if "current_permissions" in result_parts:
+            perms = result_parts["current_permissions"]
+            if "admin" in perms:
+                messages.append(f"🔑 Promu ADMIN (permissions: {perms})")
+            else:
+                messages.append(f"Permissions: {perms}")
+        if "current_memories" in result_parts:
+            mems = result_parts["current_memories"]
+            if not mems:
+                messages.append("Accès à toutes les mémoires")
+            else:
+                messages.append(f"Mémoires: {mems}")
+        
+        return {
+            "status": "ok",
+            "client_name": matching[0].client_name,
+            "token_hash_prefix": matching[0].token_hash[:8] + "...",
+            **result_parts,
+            "message": " | ".join(messages)
+        }
         
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -1447,6 +1567,11 @@ async def document_list(
         Liste des documents avec leurs métadonnées
     """
     try:
+        # Vérifier l'accès à la mémoire
+        access_err = check_memory_access(memory_id)
+        if access_err:
+            return access_err
+        
         graph_data = await get_graph().get_full_graph(memory_id)
         docs = graph_data.get("documents", [])
         
@@ -1481,6 +1606,11 @@ async def document_get(
         Métadonnées du document (et contenu si demandé)
     """
     try:
+        # Vérifier l'accès à la mémoire
+        access_err = check_memory_access(memory_id)
+        if access_err:
+            return access_err
+        
         # Récupérer les infos du document depuis le graphe (rapide, pas de S3)
         doc_info = await get_graph().get_document(memory_id, document_id)
         
@@ -1631,6 +1761,16 @@ async def storage_check(
         Rapport de cohérence S3/Graphe avec documents OK, manquants et orphelins
     """
     try:
+        # Sécurité : admin requis pour le mode global, check_memory_access pour une mémoire spécifique
+        if memory_id:
+            access_err = check_memory_access(memory_id)
+            if access_err:
+                return access_err
+        else:
+            admin_err = check_admin_permission()
+            if admin_err:
+                return admin_err
+        
         # 1. Récupérer les mémoires à vérifier
         if memory_id:
             memory = await get_graph().get_memory(memory_id)
@@ -1794,6 +1934,11 @@ async def storage_cleanup(
         Liste des fichiers orphelins (supprimés ou à supprimer)
     """
     try:
+        # Sécurité : permission admin requise (opération globale S3)
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+        
         # 1. Exécuter le check complet pour identifier les orphelins
         check = await storage_check()
         
@@ -2083,7 +2228,18 @@ async def backup_list(
         Liste des backups avec date, taille, statistiques
     """
     try:
+        # Sécurité : filtrer par mémoires autorisées
+        if memory_id:
+            access_err = check_memory_access(memory_id)
+            if access_err:
+                return access_err
+        
         backups = await get_backup().list_backups(memory_id=memory_id)
+        
+        # Filtrer les backups par les mémoires autorisées (si token restreint)
+        allowed = get_allowed_memory_ids()
+        if allowed is not None and len(allowed) > 0 and not memory_id:
+            backups = [b for b in backups if b.get("memory_id") in allowed]
         
         return {
             "status": "ok",
@@ -2270,6 +2426,25 @@ async def backup_restore_archive(
             return write_err
         
         archive_bytes = base64.b64decode(archive_base64)
+        
+        # Extraire le memory_id du manifest pour vérifier l'accès
+        import tarfile
+        from io import BytesIO
+        try:
+            with tarfile.open(fileobj=BytesIO(archive_bytes), mode='r:gz') as tar:
+                manifest_member = tar.getmember('manifest.json')
+                manifest_file = tar.extractfile(manifest_member)
+                if manifest_file:
+                    manifest_data = json.loads(manifest_file.read())
+                else:
+                    manifest_data = {}
+                archive_memory_id = manifest_data.get("memory_id")
+                if archive_memory_id:
+                    access_err = check_memory_access(archive_memory_id)
+                    if access_err:
+                        return access_err
+        except (KeyError, json.JSONDecodeError):
+            pass  # Le backup service gérera les erreurs de format
         
         async def _progress(msg):
             if ctx:

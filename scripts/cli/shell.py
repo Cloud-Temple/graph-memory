@@ -69,7 +69,7 @@ SHELL_COMMANDS = [
     "entities", "entity", "relations", "ask", "query", "check", "cleanup",
     "create", "ingest", "ingestdir", "deldoc", "ontologies",
     "tokens", "token-create", "token-revoke", "token-grant",
-    "token-ungrant", "token-set",
+    "token-ungrant", "token-set", "token-promote",
     "limit", "delete", "debug", "clear", "exit", "quit",
     "--json", "--include-documents", "--force", "--exclude", "--confirm",
     "backup", "backup-create", "backup-list", "backup-restore",
@@ -978,9 +978,41 @@ async def cmd_token_set(client: MCPClient, state: dict, args: str):
         show_error(result.get("message", str(result)))
 
 
-# =============================================================================
-# Handlers divers
-# =============================================================================
+async def cmd_token_promote(client: MCPClient, state: dict, args: str):
+    """
+    Modifie les permissions d'un token (promouvoir/rétrograder).
+
+    Usage: token-promote <hash_prefix> <permissions>
+    Permissions séparées par des virgules : read,write,admin
+
+    Exemples:
+        token-promote abc12345 admin,read,write   # Promouvoir en admin
+        token-promote abc12345 read,write          # Rétrograder
+        token-promote abc12345 read                 # Read-only
+    """
+    if not args:
+        show_warning("Usage: token-promote <hash_prefix> <permissions>")
+        console.print("[dim]Permissions: read, write, admin (séparées par des virgules)[/dim]")
+        console.print("[dim]Ex: token-promote abc12345 admin,read,write[/dim]")
+        return
+
+    parts = args.split()
+    if len(parts) < 2:
+        show_warning("Usage: token-promote <hash_prefix> <permissions>")
+        return
+
+    hash_prefix = parts[0]
+    perms = [p.strip() for p in parts[1].split(",")]
+
+    result = await client.call_tool("admin_update_token", {
+        "token_hash_prefix": hash_prefix,
+        "set_permissions": perms,
+    })
+    if result.get("status") == "ok":
+        show_token_updated(result)
+    else:
+        show_error(result.get("message", str(result)))
+
 
 # =============================================================================
 # Handlers backup
@@ -1192,6 +1224,7 @@ def run_shell(url: str, token: str):
         "token-grant <h> <m>":  "Autoriser un token à accéder à des mémoires",
         "token-ungrant <h> <m>":"Retirer l'accès d'un token à des mémoires",
         "token-set <h> [m]":    "Remplacer les mémoires d'un token (vide=toutes)",
+        "token-promote <h> <p>":"Modifier les permissions (ex: token-promote abc admin,read,write)",
         # --- Backup ---
         "backup-create [id]":   "Créer un backup (mémoire courante ou spécifiée)",
         "backup-list [id]":     "Lister les backups disponibles",
@@ -1352,6 +1385,9 @@ def run_shell(url: str, token: str):
 
             elif command == "token-set":
                 asyncio.run(cmd_token_set(client, state, args))
+
+            elif command == "token-promote":
+                asyncio.run(cmd_token_promote(client, state, args))
 
             # --- Backup commands ---
             elif command == "backup-create":
