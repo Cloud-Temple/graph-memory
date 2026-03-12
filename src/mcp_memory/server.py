@@ -1377,10 +1377,11 @@ async def admin_update_token(
     add_memories: Annotated[Optional[List[str]], Field(default=None, description="Mémoires à ajouter (ex: ['JURIDIQUE', 'CLOUD'])")] = None,
     remove_memories: Annotated[Optional[List[str]], Field(default=None, description="Mémoires à retirer (ex: ['JURIDIQUE'])")] = None,
     set_memories: Annotated[Optional[List[str]], Field(default=None, description="Remplacer la liste (ex: ['CLOUD'], ou [] pour tout autoriser)")] = None,
-    set_permissions: Annotated[Optional[List[str]], Field(default=None, description="Remplacer les permissions (ex: ['admin', 'read', 'write'] pour promouvoir en admin)")] = None
+    set_permissions: Annotated[Optional[List[str]], Field(default=None, description="Remplacer les permissions (ex: ['admin', 'read', 'write'] pour promouvoir en admin)")] = None,
+    set_email: Annotated[Optional[str], Field(default=None, description="Modifier l'adresse email du token")] = None
 ) -> dict:
     """
-    Met à jour les mémoires autorisées et/ou les permissions d'un token.
+    Met à jour les mémoires autorisées, les permissions et/ou l'email d'un token.
     
     Gestion des mémoires (mutuellement exclusifs avec set_memories) :
     - add_memories: Ajoute des mémoires à la liste existante
@@ -1464,8 +1465,18 @@ async def admin_update_token(
                 result_parts["previous_memories"] = mem_result["previous_memories"]
                 result_parts["current_memories"] = mem_result["current_memories"]
         
+        # === Mise à jour de l'email (si demandé) ===
+        if set_email is not None:
+            email_result = await get_tokens().update_token_email(
+                token_hash=matching[0].token_hash,
+                email=set_email
+            )
+            if email_result:
+                result_parts["previous_email"] = email_result["previous_email"]
+                result_parts["current_email"] = email_result["current_email"]
+        
         if not result_parts:
-            return {"status": "error", "message": "Aucune modification demandée (spécifiez set_permissions, add_memories, remove_memories ou set_memories)"}
+            return {"status": "error", "message": "Aucune modification demandée (spécifiez set_permissions, set_email, add_memories, remove_memories ou set_memories)"}
         
         # Construire le message
         messages = []

@@ -374,6 +374,34 @@ class TokenManager:
                 "current_permissions": permissions
             }
     
+    async def update_token_email(
+        self,
+        token_hash: str,
+        email: str
+    ) -> Optional[dict]:
+        """Met à jour l'email d'un token."""
+        async with self.graph.session() as session:
+            result = await session.run(
+                "MATCH (t:Token {hash: $hash, is_active: true}) RETURN t",
+                hash=token_hash
+            )
+            record = await result.single()
+            if not record:
+                return None
+            node = record["t"]
+            previous_email = node.get("email")
+            await session.run(
+                "MATCH (t:Token {hash: $hash}) SET t.email = $email, t.updated_at = datetime()",
+                hash=token_hash, email=email
+            )
+            print(f"🔑 [Auth] Token {token_hash[:8]}... email mis à jour: {email}", file=sys.stderr)
+            return {
+                "token_hash": token_hash,
+                "client_name": node["client_name"],
+                "previous_email": previous_email,
+                "current_email": email
+            }
+
     async def check_permission(
         self,
         token_info: TokenInfo,
