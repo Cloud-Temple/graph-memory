@@ -860,6 +860,16 @@ async def cmd_token_create(client: MCPClient, state: dict, args: str):
     perms = parts[1].split(",") if len(parts) > 1 else ["read", "write"]
     memories = parts[2].split(",") if len(parts) > 2 else []
 
+    # Validation des permissions (évite que l'email finisse dans permissions)
+    valid_perms = {"read", "write", "admin"}
+    invalid = [p for p in perms if p not in valid_perms]
+    if invalid:
+        show_error(f"Permissions invalides: {invalid}. Valides: read, write, admin")
+        console.print("[dim]Utilisez --email pour l'adresse email:[/dim]")
+        console.print("[dim]  token-create quoteflow --email user@example.com[/dim]")
+        console.print("[dim]  token-create quoteflow read,write JURIDIQUE --email user@example.com[/dim]")
+        return
+
     params = {
         "client_name": client_name,
         "permissions": perms,

@@ -1256,6 +1256,16 @@ async def admin_create_token(
         if admin_err:
             return admin_err
         
+        # Valider les permissions
+        valid_perms = {"read", "write", "admin"}
+        requested_perms = permissions or ["read", "write"]
+        invalid = set(requested_perms) - valid_perms
+        if invalid:
+            return {
+                "status": "error",
+                "message": f"Permissions invalides: {invalid}. Valides: {sorted(valid_perms)}"
+            }
+        
         token = await get_tokens().create_token(
             client_name=client_name,
             permissions=permissions or ["read", "write"],
