@@ -2084,7 +2084,7 @@ async def system_about() -> dict:
             "Documents": ["document_list", "document_get", "document_delete"],
             "Backup/Restore": ["backup_create", "backup_list", "backup_restore", "backup_download", "backup_delete", "backup_restore_archive"],
             "Administration": ["admin_create_token", "admin_list_tokens", "admin_revoke_token", "admin_update_token"],
-            "Diagnostic": ["system_health", "system_about", "storage_check", "storage_cleanup"],
+            "Diagnostic": ["system_health", "system_about", "system_whoami", "storage_check", "storage_cleanup"],
             "Visualisation": ["memory_graph", "ontology_list"],
         }
         total_tools = sum(len(v) for v in tools_categories.values())
@@ -2182,6 +2182,61 @@ async def system_health() -> dict:
         "status": "ok" if all_ok else "error",
         "services": results
     }
+
+
+@mcp.tool()
+async def system_whoami() -> dict:
+    """
+    Identité du token courant.
+
+    Retourne les informations du contexte d'authentification :
+    - Type d'authentification (bootstrap, token, localhost)
+    - Nom du client
+    - Permissions (read, write, admin)
+    - Mémoires autorisées
+    - Email, date de création, expiration (si token)
+
+    Utile pour vérifier son identité et ses droits d'accès.
+
+    Returns:
+        Identité et permissions du token courant
+    """
+    auth = current_auth.get()
+
+    # Pas d'auth (localhost, endpoints publics)
+    if auth is None:
+        return {
+            "status": "ok",
+            "auth_type": "localhost",
+            "client_name": "localhost",
+            "permissions": ["admin", "read", "write"],
+            "memory_ids": [],
+            "note": "Accès local sans authentification"
+        }
+
+    result = {
+        "status": "ok",
+        "auth_type": auth.get("type", "unknown"),
+        "client_name": auth.get("client_name", "unknown"),
+        "permissions": auth.get("permissions", []),
+        "memory_ids": auth.get("memory_ids", []),
+    }
+
+    # Pour les tokens, enrichir avec les infos stockées en base (email, dates)
+    if auth.get("type") == "token" and auth.get("token_hash"):
+        result["token_hash"] = auth["token_hash"]
+        try:
+            tokens = await get_tokens().list_tokens(include_revoked=False)
+            for t in tokens:
+                if t.token_hash == auth["token_hash"]:
+                    result["email"] = t.email
+                    result["created_at"] = t.created_at.isoformat() if t.created_at else None
+                    result["expires_at"] = t.expires_at.isoformat() if t.expires_at else None
+                    break
+        except Exception:
+            pass
+
+    return result
 
 
 # =============================================================================
@@ -2518,7 +2573,7 @@ def main():
     print("  - memory_create, memory_delete, memory_list, memory_stats", file=sys.stderr)
     print("  - memory_ingest, memory_search, memory_query, memory_get_context", file=sys.stderr)
     print("  - admin_create_token, admin_list_tokens, admin_revoke_token, admin_update_token", file=sys.stderr)
-    print("  - storage_check, storage_cleanup, system_health, system_about", file=sys.stderr)
+    print("  - storage_check, storage_cleanup, system_health, system_about, system_whoami", file=sys.stderr)
     print("  - backup_create, backup_list, backup_restore, backup_download, backup_delete", file=sys.stderr)
     print("=" * 70, file=sys.stderr)
     

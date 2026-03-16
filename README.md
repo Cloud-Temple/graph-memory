@@ -160,7 +160,7 @@ Question en langage naturel
 - Clé bootstrap pour le premier token + **promotion admin déléguée** (v1.6.1)
 - **Isolation multi-tenant durcie** (v1.6.1) : chaque token ne voit/modifie que ses mémoires autorisées
 - Isolation des données par mémoire (namespace Neo4j)
-- **14 contrôles d'accès** sur les 28 outils MCP (access, write, admin)
+- **14 contrôles d'accès** sur les 29 outils MCP (access, write, admin)
 - **Recette automatisée** : 119 tests × 3 profils (admin, read/write, read-only)
 
 ---
@@ -189,7 +189,7 @@ Question en langage naturel
 │  │  • AuthMiddleware (Bearer Token)                               │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools (28 outils)                                         │  │
+│  │  MCP Tools (29 outils)                                         │  │
 │  │  • memory_create/delete/list/stats                             │  │
 │  │  • memory_ingest/search/get_context                            │  │
 │  │  • question_answer / memory_query                              │  │
@@ -415,7 +415,7 @@ mcp> exit                          # Quitter
 
 ## 🔧 Outils MCP
 
-28 outils exposés via le protocole MCP (Streamable HTTP) :
+29 outils exposés via le protocole MCP (Streamable HTTP) :
 
 ### Gestion des mémoires
 
@@ -476,8 +476,10 @@ mcp> exit                          # Quitter
 | `admin_create_token` | `client_name`, `permissions`, `email` | Crée un token d'accès                                          |
 | `admin_list_tokens`  | —                                     | Liste les tokens actifs                                        |
 | `admin_revoke_token` | `token_hash`                          | Révoque un token                                               |
-| `admin_update_token` | `token_hash`, `memory_ids`, `action`  | Modifie les mémoires d'un token (add/remove/set)               |
+| `admin_update_token` | `token_hash`, `memory_ids`, `action`  | Modifie les mémoires/permissions/email d'un token              |
 | `system_health`      | —                                     | État de santé des services (Neo4j, S3, LLM, Qdrant, Embedding) |
+| `system_about`       | —                                     | Identité et capacités du service (29 outils, ontologies)        |
+| `system_whoami`      | —                                     | Identité du token courant (permissions, mémoires, email)        |
 
 ---
 
@@ -885,4 +887,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v1.6.1 — Mars 2026*
+*Graph Memory v2.0.0 — Mars 2026*

@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.0.0] - 2026-03-16
+
+### 🚀 Refonte CLI v2.0 — Alignement syntaxe Live Memory
+
+**Breaking changes :**
+- **`health`** appelle désormais `system_health` (teste S3, Neo4j, LLMaaS, Qdrant, Embedding) au lieu de juste lister les mémoires
+- **Token CLI simplifiée** : `grant`, `ungrant`, `set-memories`, `promote`, `set-email` → remplacées par **`token update`** unique avec options `--permissions`, `--add-memories`, `--remove-memories`, `--set-memories`, `--email`
+- **`--force`** remplacé par **`--confirm`** pour les opérations destructives (alignement live-mem)
+
+**Nouveautés :**
+- **`system_whoami`** — 29e outil MCP : identité du token courant (type, permissions, mémoires, email, dates)
+- **`whoami`** — commande CLI Click + shell interactif
+- **`--json/-j`** sur TOUTES les commandes CLI (JSON brut sans formatage Rich)
+- **`_run_tool()` helper** — pattern commun (comme live-mem), supprime ~600 lignes de boilerplate dans commands.py
+- **`_run_rest()` helper** — idem pour les appels REST (list_memories, get_graph)
+- **`show_whoami_result()`** — affichage Rich de l'identité token (permissions icônes, email, dates)
+- **`show_health_result()`** — affichage Rich du health par service (tableau avec statuts)
+- **`show_json()`** — affichage JSON coloré pour le flag `--json`
+
+**Améliorations display.py :**
+- 3 nouvelles fonctions d'affichage partagées CLI/Shell
+
+**Tests :**
+- 3 nouveaux tests `system_whoami` dans `test_system.py` (admin, client_rw, client_ro)
+
+### 📊 Métriques
+- 29 outils MCP (28 → 29, +system_whoami)
+- commands.py : ~480 lignes (vs ~750 avant, -36% grâce à _run_tool)
+- VERSION bump 1.6.1 → 2.0.0
+
 ## [1.6.1] - 2026-03-12
 
 ### 🔧 Correctifs tokens + set_email + rate limits WAF

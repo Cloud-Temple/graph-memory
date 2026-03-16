@@ -88,11 +88,14 @@ Point d'entrée : `python scripts/mcp_cli.py [COMMANDE] [OPTIONS]`
 ### Serveur
 
 ```bash
-# Identité et capacités du service (28 outils, 5 ontologies, services, mémoires)
+# Identité et capacités du service (29 outils, 5 ontologies, services, mémoires)
 python scripts/mcp_cli.py about
 
-# État du serveur
+# État de santé des services (S3, Neo4j, LLMaaS, Qdrant, Embedding)
 python scripts/mcp_cli.py health
+
+# Identité du token courant (permissions, mémoires, email)
+python scripts/mcp_cli.py whoami
 ```
 
 ### Mémoires
@@ -234,35 +237,26 @@ python scripts/mcp_cli.py token list
 
 # Créer un token
 python scripts/mcp_cli.py token create quoteflow
-python scripts/mcp_cli.py token create quoteflow --email user@example.com
+python scripts/mcp_cli.py token create quoteflow -e user@example.com
 python scripts/mcp_cli.py token create quoteflow -p read,write -m JURIDIQUE,CLOUD
-python scripts/mcp_cli.py token create admin-bot -p admin -e 30
+python scripts/mcp_cli.py token create admin-bot -p read,write,admin --expires 30
 
 # Révoquer un token (par hash, copiez-le depuis 'token list')
 python scripts/mcp_cli.py token revoke <hash>
-python scripts/mcp_cli.py token revoke <hash> -f   # Sans confirmation
+python scripts/mcp_cli.py token revoke <hash> --confirm   # Sans prompt
 
-# Autoriser un token à accéder à des mémoires
-python scripts/mcp_cli.py token grant <hash> JURIDIQUE CLOUD
-
-# Retirer l'accès à des mémoires
-python scripts/mcp_cli.py token ungrant <hash> JURIDIQUE
-
-# Remplacer toute la liste des mémoires (vide = accès à toutes)
-python scripts/mcp_cli.py token set-memories <hash> JURIDIQUE CLOUD
-python scripts/mcp_cli.py token set-memories <hash>   # Accès à toutes
-
-# Promouvoir/rétrograder les permissions d'un token
-python scripts/mcp_cli.py token promote <hash> admin,read,write  # Promouvoir en admin
-python scripts/mcp_cli.py token promote <hash> read,write         # Rétrograder en client normal
-python scripts/mcp_cli.py token promote <hash> read                # Passer en read-only
-
-# Modifier l'email d'un token
-python scripts/mcp_cli.py token set-email <hash> christophe.lesur@cloud-temple.com
+# Mettre à jour un token (permissions, mémoires, email) — commande unifiée v2.0
+python scripts/mcp_cli.py token update <hash> -p read,write,admin          # Promouvoir admin
+python scripts/mcp_cli.py token update <hash> -p read                       # Rétrograder read-only
+python scripts/mcp_cli.py token update <hash> --add-memories JURIDIQUE      # Ajouter mémoire
+python scripts/mcp_cli.py token update <hash> --remove-memories CLOUD       # Retirer mémoire
+python scripts/mcp_cli.py token update <hash> --set-memories "JURIDIQUE,CLOUD"  # Remplacer
+python scripts/mcp_cli.py token update <hash> --set-memories ""             # Accès à toutes
+python scripts/mcp_cli.py token update <hash> -e user@cloud-temple.com      # Modifier email
 ```
 
-> **Note v1.6.0** : Un token avec la permission `admin` a les mêmes droits que la bootstrap key :
-> il peut créer/révoquer des tokens, gérer les permissions, accéder à toutes les mémoires et utiliser les outils de diagnostic globaux.
+> **Note v2.0.0** : `token update` remplace les anciennes commandes `grant`, `ungrant`, `set-memories`, `promote`, `set-email`.
+> Un token avec la permission `admin` a les mêmes droits que la bootstrap key.
 > **Chaîne de confiance** : bootstrap → admin délégué → sous-tokens.
 
 **Options de `document ingest` :**
@@ -302,11 +296,12 @@ Fonctionnalités :
 
 #### Navigation
 
-| Commande             | Description                   |
-| -------------------- | ----------------------------- |
-| `about`              | Identité et capacités du service |
-| `health`             | État du serveur               |
-| `list`               | Lister les mémoires           |
+| Commande             | Description                                          |
+| -------------------- | ---------------------------------------------------- |
+| `about`              | Identité et capacités du service                     |
+| `health`             | État de santé (S3, Neo4j, LLMaaS, Qdrant, Embedding) |
+| `whoami`             | Identité du token courant (permissions, mémoires)    |
+| `list`               | Lister les mémoires                                  |
 | `use <id>`           | Sélectionner une mémoire      |
 | `create <id> <onto>` | Créer une mémoire             |
 | `info`               | Résumé de la mémoire courante |
@@ -347,11 +342,12 @@ Fonctionnalités :
 | `tokens`                                                  | Lister les tokens actifs (hash complet copiable) |
 | `token-create <client> [perms] [mémoires] [--email addr]` | Créer un token                                   |
 | `token-revoke <hash>`                                     | Révoquer un token                                |
-| `token-grant <hash> <mem1> [mem2]`                        | Ajouter des mémoires à un token                  |
-| `token-ungrant <hash> <mem1> [mem2]`                      | Retirer des mémoires                             |
-| `token-set <hash> [mem1] [mem2]`                          | Remplacer les mémoires (vide = toutes)           |
-| `token-promote <hash> <perms>`                            | Modifier les permissions (admin, read, write)    |
-| `token-set-email <hash> <email>`                          | Modifier l'email d'un token                      |
+| `token-update <hash> [options]` *(v2.0)*                  | Modifier permissions, mémoires ou email          |
+| `token-grant <hash> <mem1> [mem2]`                        | *(alias)* Ajouter des mémoires                   |
+| `token-ungrant <hash> <mem1> [mem2]`                      | *(alias)* Retirer des mémoires                   |
+| `token-set <hash> [mem1] [mem2]`                          | *(alias)* Remplacer les mémoires                 |
+| `token-promote <hash> <perms>`                            | *(alias)* Modifier les permissions               |
+| `token-set-email <hash> <email>`                          | *(alias)* Modifier l'email                       |
 
 #### 💾 Backup / Restore
 
@@ -497,4 +493,4 @@ pip install httpx click rich prompt_toolkit
 
 ---
 
-*Graph Memory CLI v1.6.0 — Mars 2026*
+*Graph Memory CLI v2.0.0 — Mars 2026*

@@ -973,3 +973,94 @@ def show_answer(answer: str, entities: list = None, source_documents: list = Non
     # Entités liées
     if entities:
         console.print(f"[dim]Entités liées: {', '.join(str(e) for e in entities)}[/dim]")
+
+
+# =============================================================================
+# JSON brut (--json)
+# =============================================================================
+
+def show_json(data: dict):
+    """Affiche un dict en JSON coloré (pour le flag --json)."""
+    import json
+    from rich.syntax import Syntax
+    console.print(Syntax(
+        json.dumps(data, indent=2, ensure_ascii=False, default=str), "json"
+    ))
+
+
+# =============================================================================
+# Whoami (identité du token)
+# =============================================================================
+
+def show_whoami_result(result: dict):
+    """Affiche le résultat de system_whoami."""
+    auth_type = result.get("auth_type", "?")
+    type_icon = "🔑" if auth_type == "bootstrap" else "🏷️" if auth_type == "token" else "🏠"
+    perms = result.get("permissions", [])
+
+    # Icônes de permissions
+    perm_icons = []
+    if "read" in perms:
+        perm_icons.append("🔑 read")
+    if "write" in perms:
+        perm_icons.append("✏️ write")
+    if "admin" in perms:
+        perm_icons.append("👑 admin")
+    perm_display = "  ".join(perm_icons) if perm_icons else "aucune"
+
+    memory_ids = result.get("memory_ids", [])
+    memories_str = ", ".join(memory_ids) if memory_ids else "[dim]toutes[/dim]"
+
+    lines = [
+        f"[bold]Identité :[/bold] [cyan bold]{result.get('client_name', '?')}[/cyan bold]",
+        f"[bold]Type     :[/bold] {type_icon} {auth_type}",
+        f"[bold]Droits   :[/bold] {perm_display}",
+        f"[bold]Mémoires :[/bold] {memories_str}",
+    ]
+
+    # Métadonnées supplémentaires pour les tokens
+    if result.get("email"):
+        lines.append(f"[bold]Email    :[/bold] {result['email']}")
+    if result.get("token_hash"):
+        lines.append(f"[bold]Hash     :[/bold] [dim]{result['token_hash']}[/dim]")
+    if result.get("created_at"):
+        lines.append(f"[bold]Créé le  :[/bold] {result['created_at'][:19]}")
+    expires = result.get("expires_at")
+    if expires:
+        lines.append(f"[bold]Expire   :[/bold] {expires[:19]}")
+    elif result.get("auth_type") == "token":
+        lines.append(f"[bold]Expire   :[/bold] jamais")
+    if result.get("note"):
+        lines.append(f"\n[dim italic]{result['note']}[/dim italic]")
+
+    console.print(Panel.fit(
+        "\n".join(lines),
+        title="👤 Qui suis-je ?", border_style="cyan",
+    ))
+
+
+# =============================================================================
+# Health (état de santé des services)
+# =============================================================================
+
+def show_health_result(result: dict):
+    """Affiche le résultat de system_health."""
+    status = result.get("status", "?")
+    services = result.get("services", {})
+    icon = "✅" if status == "ok" else "⚠️"
+
+    table = Table(title=f"{icon} Health — Services", show_header=True)
+    table.add_column("Service", style="cyan bold")
+    table.add_column("Statut")
+    table.add_column("Détails", style="dim")
+
+    for name, info in services.items():
+        if isinstance(info, dict):
+            s = info.get("status", "?")
+            s_icon = "✅" if s == "ok" else "❌"
+            details = info.get("message", info.get("latency_ms", ""))
+            table.add_row(name, f"{s_icon} {s}", str(details))
+        else:
+            table.add_row(name, str(info), "")
+
+    console.print(table)

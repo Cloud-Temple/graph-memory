@@ -85,7 +85,7 @@ async def setup_tokens(admin: MCPClient) -> dict:
 async def main():
     """Point d'entrée principal."""
     print("=" * 70)
-    print("🧪 RECETTE COMPLÈTE — Graph Memory v1.6.0")
+    print("🧪 RECETTE COMPLÈTE — Graph Memory v2.0.0")
     print(f"   URL     : {MCP_URL}")
     print(f"   Phases  : 7 (système, tokens, mémoires, documents, recherche, backup, cleanup)")
     print(f"   Profils : admin + read/write + read-only")

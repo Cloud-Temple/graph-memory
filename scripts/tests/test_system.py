@@ -62,3 +62,41 @@ async def run(admin: MCPClient, client_rw: MCPClient, client_ro: MCPClient, **ct
     print("\n  📋 1.6 — ontology_list (client_rw, public)")
     result = await client_rw.call_tool("ontology_list", {})
     assert_ok(result, "ontology_list accessible par client_rw")
+
+    # 1.7 — system_whoami (admin/bootstrap)
+    print("\n  📋 1.7 — system_whoami (admin)")
+    result = await admin.call_tool("system_whoami", {})
+    if assert_ok(result, "system_whoami (admin)"):
+        auth_type = result.get("auth_type", "?")
+        client_name = result.get("client_name", "?")
+        permissions = result.get("permissions", [])
+        ok(f"  → auth_type: {auth_type}, client: {client_name}")
+        if "admin" in permissions:
+            ok("  → permission admin présente")
+        else:
+            fail("  → permission admin manquante", f"permissions: {permissions}")
+
+    # 1.8 — system_whoami (client_rw)
+    print("\n  📋 1.8 — system_whoami (client_rw)")
+    result = await client_rw.call_tool("system_whoami", {})
+    if assert_ok(result, "system_whoami (client_rw)"):
+        auth_type = result.get("auth_type", "?")
+        permissions = result.get("permissions", [])
+        if auth_type == "token":
+            ok(f"  → auth_type: token")
+        else:
+            fail(f"  → auth_type attendu: token, obtenu: {auth_type}")
+        if "write" in permissions:
+            ok("  → permission write présente")
+        else:
+            fail("  → permission write manquante", f"permissions: {permissions}")
+
+    # 1.9 — system_whoami (client_ro)
+    print("\n  📋 1.9 — system_whoami (client_ro)")
+    result = await client_ro.call_tool("system_whoami", {})
+    if assert_ok(result, "system_whoami (client_ro)"):
+        permissions = result.get("permissions", [])
+        if "read" in permissions and "write" not in permissions:
+            ok("  → permissions read-only correctes")
+        else:
+            fail("  → permissions read-only incorrectes", f"permissions: {permissions}")

@@ -65,11 +65,10 @@ from .ingest_progress import run_ingest_with_progress
 
 # Liste des commandes du shell
 SHELL_COMMANDS = [
-    "help", "about", "health", "list", "use", "info", "graph", "docs",
+    "help", "about", "health", "whoami", "list", "use", "info", "graph", "docs",
     "entities", "entity", "relations", "ask", "query", "check", "cleanup",
     "create", "ingest", "ingestdir", "deldoc", "ontologies",
-    "tokens", "token-create", "token-revoke", "token-grant",
-    "token-ungrant", "token-set", "token-promote", "token-set-email",
+    "tokens", "token-create", "token-revoke", "token-update",
     "limit", "delete", "debug", "clear", "exit", "quit",
     "--json", "--include-documents", "--force", "--exclude", "--confirm",
     "backup", "backup-create", "backup-list", "backup-restore",
@@ -425,20 +424,23 @@ async def cmd_about(client: MCPClient, state: dict):
 
 
 async def cmd_health(client: MCPClient, state: dict):
-    """Vérifie l'état du serveur."""
-    try:
-        result = await client.list_memories()
-        if result.get("status") == "ok":
-            console.print(Panel.fit(
-                f"[bold green]✅ Serveur OK[/bold green]\n\n"
-                f"URL: [cyan]{client.base_url}[/cyan]\n"
-                f"Mémoires: [green]{result.get('count', 0)}[/green]",
-                title="🏥 État du serveur", border_style="green"
-            ))
-        else:
-            show_error(f"Serveur répond mais erreur: {result.get('message')}")
-    except Exception as e:
-        show_error(f"Connexion impossible: {e}")
+    """Vérifie l'état de santé des 5 services (S3, Neo4j, LLMaaS, Qdrant, Embedding)."""
+    from .display import show_health_result
+    result = await client.call_tool("system_health", {})
+    if result.get("status") in ("ok", "error"):
+        show_health_result(result)
+    else:
+        show_error(result.get("message", "Erreur"))
+
+
+async def cmd_whoami(client: MCPClient, state: dict):
+    """Affiche l'identité du token courant (permissions, mémoires, email)."""
+    from .display import show_whoami_result
+    result = await client.call_tool("system_whoami", {})
+    if result.get("status") == "ok":
+        show_whoami_result(result)
+    else:
+        show_error(result.get("message", "Erreur"))
 
 
 async def cmd_create(client: MCPClient, state: dict, args: str):
@@ -1218,7 +1220,8 @@ def run_shell(url: str, token: str):
     HELP = {
         # --- Serveur ---
         "about":        "Identité et capacités du service MCP Memory",
-        "health":       "État du serveur (URL, nb mémoires)",
+        "health":       "État de santé (S3, Neo4j, LLMaaS, Qdrant, Embedding)",
+        "whoami":       "Identité du token courant (permissions, mémoires, email)",
         # --- Mémoires ---
         "list":         "Lister les mémoires",
         "use <id>":     "Sélectionner une mémoire",
@@ -1377,6 +1380,9 @@ def run_shell(url: str, token: str):
 
             elif command == "health":
                 asyncio.run(cmd_health(client, state))
+
+            elif command == "whoami":
+                asyncio.run(cmd_whoami(client, state))
 
             elif command == "create":
                 asyncio.run(cmd_create(client, state, args))

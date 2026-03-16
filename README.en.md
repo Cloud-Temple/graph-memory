@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v1.6.1).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v2.0.0).
 
-**Latest**: v1.6.1 (March 11, 2026) — Hardened multi-tenant isolation (14 security fixes), delegated admin promotion, comprehensive 119-test acceptance suite.
+**Latest**: v2.0.0 (March 16, 2026) — CLI v2.0 aligned with Live Memory syntax (whoami, health services, token update, --json everywhere), system_whoami (29th MCP tool), 130-test acceptance suite.
 
 ---
 
@@ -51,14 +51,14 @@ Question (natural language)
 
 ## ✨ Features
 
-- **28 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
+- **29 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
 - **Ontology-guided extraction** — 6 built-in ontologies (legal, cloud, managed-services, presales, general, software-development)
 - **Graph-Guided RAG** — graph identifies relevant docs, then Qdrant searches chunks *within* those docs
 - **Interactive web UI** — vis-network graph visualization, filtering, ASK panel with Markdown rendering
 - **Complete CLI** — Click (scriptable) + interactive shell with autocompletion
 - **Backup/Restore** — full 3-layer backup (Neo4j + Qdrant + S3) with tar.gz archive support
 - **Multi-tenant** — namespace isolation per memory in Neo4j
-- **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.1), admin delegation, rate limiting, non-root container, isolated Docker network, **119 automated tests**
+- **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.1), admin delegation, rate limiting, non-root container, isolated Docker network, **130 automated tests**
 - **Formats** — PDF, DOCX, Markdown, TXT, HTML, CSV
 
 ---
@@ -79,7 +79,7 @@ Question (natural language)
 ┌─────────────────────────────────────────────────────┐
 │           Graph Memory Service (internal :8002)      │
 │  Auth → Logging → Static Files → MCP Streamable HTTP │
-│  28 MCP tools • 5 ontologies • Graph-Guided RAG      │
+│  29 MCP tools • 5 ontologies • Graph-Guided RAG      │
 └────────────┬───────────┬──────────┬─────────────────┘
              ▼           ▼          ▼
          Neo4j 5    S3 Storage   Qdrant
@@ -186,7 +186,7 @@ async def example():
 
 ---
 
-## 🔧 MCP Tools (28)
+## 🔧 MCP Tools (29)
 
 | Category           | Tools                                                                                                          |
 | ------------------ | -------------------------------------------------------------------------------------------------------------- |
@@ -196,7 +196,7 @@ async def example():
 | **Documents**      | `document_list`, `document_get`, `document_delete`                                                             |
 | **Backup/Restore** | `backup_create`, `backup_list`, `backup_restore`, `backup_download`, `backup_delete`, `backup_restore_archive` |
 | **Admin**          | `admin_create_token`, `admin_list_tokens`, `admin_revoke_token`, `admin_update_token`                          |
-| **Diagnostics**    | `system_health`, `system_about`, `storage_check`, `storage_cleanup`                                            |
+| **Diagnostics**    | `system_health`, `system_about`, `system_whoami`, `storage_check`, `storage_cleanup`                           |
 | **Visualization**  | `memory_graph`, `ontology_list`                                                                                |
 
 ---

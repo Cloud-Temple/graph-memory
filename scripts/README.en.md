@@ -205,4 +205,4 @@ pip install httpx click rich prompt_toolkit
 
 ---
 
-*Graph Memory CLI v1.6.0 — March 2026*
+*Graph Memory CLI v2.0.0 — March 2026*
