@@ -247,6 +247,53 @@ async def memory_create(
 
 
 @mcp.tool()
+async def memory_update(
+    memory_id: Annotated[str, Field(description="ID de la mémoire à modifier")],
+    name: Annotated[Optional[str], Field(default=None, description="Nouveau nom (vide = pas de changement)")] = None,
+    description: Annotated[Optional[str], Field(default=None, description="Nouvelle description (vide = pas de changement)")] = None,
+) -> dict:
+    """
+    Met à jour les métadonnées d'une mémoire (nom, description).
+    
+    Seuls les champs fournis sont modifiés. L'ontologie n'est pas modifiable.
+    
+    Args:
+        memory_id: ID de la mémoire à modifier
+        name: Nouveau nom (None = pas de changement)
+        description: Nouvelle description (None = pas de changement)
+        
+    Returns:
+        Mémoire mise à jour avec ses nouvelles valeurs
+    """
+    try:
+        # Vérifier l'accès à la mémoire + permission write
+        access_err = check_memory_access(memory_id)
+        if access_err:
+            return access_err
+        write_err = check_write_permission()
+        if write_err:
+            return write_err
+        
+        if name is None and description is None:
+            return {"status": "error", "message": "Rien à modifier. Passez --name et/ou --description."}
+        
+        memory = await get_graph().update_memory(memory_id, name=name, description=description)
+        
+        if not memory:
+            return {"status": "error", "message": f"Mémoire '{memory_id}' non trouvée"}
+        
+        return {
+            "status": "ok",
+            "memory_id": memory.id,
+            "name": memory.name,
+            "description": memory.description,
+            "ontology": memory.ontology,
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Erreur mise à jour: {str(e)}"}
+
+
+@mcp.tool()
 async def memory_delete(
     memory_id: Annotated[str, Field(description="ID de la mémoire à supprimer (⚠️ irréversible)")]
 ) -> dict:

@@ -208,6 +208,59 @@ class GraphService:
                 created_at=node["created_at"].to_native() if node.get("created_at") else datetime.utcnow()
             )
     
+    async def update_memory(
+        self,
+        memory_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Optional[Memory]:
+        """
+        Met à jour les métadonnées d'une mémoire (name, description).
+        
+        Seuls les champs fournis (non None) sont modifiés.
+        L'ontologie n'est pas modifiable après création.
+        
+        Returns:
+            La mémoire mise à jour, ou None si non trouvée.
+        """
+        async with self.session() as session:
+            # Construire dynamiquement la clause SET
+            set_parts = []
+            params = {"id": memory_id}
+            
+            if name is not None:
+                set_parts.append("m.name = $name")
+                params["name"] = name
+            if description is not None:
+                set_parts.append("m.description = $description")
+                params["description"] = description
+            
+            if not set_parts:
+                return await self.get_memory(memory_id)
+            
+            set_clause = ", ".join(set_parts)
+            query = f"""
+                MATCH (m:Memory {{id: $id}})
+                SET {set_clause}
+                RETURN m
+            """
+            
+            result = await session.run(query, **params)
+            record = await result.single()
+            
+            if not record:
+                return None
+            
+            node = record["m"]
+            print(f"✏️ [Graph] Mémoire mise à jour: {memory_id} ({', '.join(set_parts)})", file=sys.stderr)
+            return Memory(
+                id=node["id"],
+                name=node["name"],
+                description=node.get("description"),
+                ontology=node.get("ontology", "default"),
+                created_at=node["created_at"].to_native() if node.get("created_at") else datetime.utcnow()
+            )
+    
     async def delete_memory(self, memory_id: str) -> bool:
         """
         Supprime une mémoire et tous ses nœuds associés.

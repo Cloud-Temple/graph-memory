@@ -46,13 +46,15 @@ Entry point: `python scripts/mcp_cli.py [COMMAND] [OPTIONS]`
 ```bash
 python scripts/mcp_cli.py about      # Service identity & capabilities
 python scripts/mcp_cli.py health     # Health check (all services)
+python scripts/mcp_cli.py whoami     # Current token identity (permissions, memories)
 ```
 
 ### Memories
 ```bash
 python scripts/mcp_cli.py memory list
 python scripts/mcp_cli.py memory create LEGAL -n "Legal Corpus" -o legal
-python scripts/mcp_cli.py memory delete LEGAL -f
+python scripts/mcp_cli.py memory update LEGAL -n "New Name" -d "New description"
+python scripts/mcp_cli.py memory delete LEGAL --confirm
 python scripts/mcp_cli.py memory info LEGAL
 python scripts/mcp_cli.py memory graph LEGAL
 python scripts/mcp_cli.py memory entities LEGAL
@@ -92,27 +94,25 @@ python scripts/mcp_cli.py backup delete "LEGAL/2026-02-16T15-33-48" -f
 python scripts/mcp_cli.py backup restore-file ./backup.tar.gz
 ```
 
-### Access Tokens
+### Access Tokens (v2.0 — unified `token update`)
 ```bash
 python scripts/mcp_cli.py token list
 python scripts/mcp_cli.py token create quoteflow -p read,write -m LEGAL,CLOUD
-python scripts/mcp_cli.py token create admin-bot -p admin -e 30
-python scripts/mcp_cli.py token revoke <hash> -f
-python scripts/mcp_cli.py token grant <hash> LEGAL CLOUD
-python scripts/mcp_cli.py token ungrant <hash> LEGAL
-python scripts/mcp_cli.py token set-memories <hash>  # empty = all memories
+python scripts/mcp_cli.py token create admin-bot -p read,write,admin --expires 30
+python scripts/mcp_cli.py token revoke <hash> --confirm
 
-# Promote/demote token permissions
-python scripts/mcp_cli.py token promote <hash> admin,read,write  # Promote to admin
-python scripts/mcp_cli.py token promote <hash> read,write         # Demote to regular
-python scripts/mcp_cli.py token promote <hash> read                # Read-only
-
-# Update a token's email
-python scripts/mcp_cli.py token set-email <hash> user@example.com
+# Unified update command (replaces grant/ungrant/set-memories/promote/set-email)
+python scripts/mcp_cli.py token update <hash> -p read,write,admin          # Promote to admin
+python scripts/mcp_cli.py token update <hash> -p read                       # Demote to read-only
+python scripts/mcp_cli.py token update <hash> --add-memories LEGAL          # Add memory
+python scripts/mcp_cli.py token update <hash> --remove-memories CLOUD       # Remove memory
+python scripts/mcp_cli.py token update <hash> --set-memories "LEGAL,CLOUD"  # Replace all
+python scripts/mcp_cli.py token update <hash> --set-memories ""             # Access to all
+python scripts/mcp_cli.py token update <hash> -e user@example.com           # Update email
 ```
 
-> **v1.6.0**: A token with `admin` permission has the same rights as the bootstrap key:
-> create/revoke tokens, manage permissions, access all memories, use global diagnostics.
+> **v2.0.0**: `token update` replaces the old `grant`, `ungrant`, `set-memories`, `promote`, `set-email` commands.
+> A token with `admin` permission has the same rights as the bootstrap key.
 > **Trust chain**: bootstrap → delegated admin → sub-tokens.
 
 ---
@@ -125,13 +125,13 @@ python scripts/mcp_cli.py shell
 
 Features: Tab completion, persistent history, `--json` on any read command.
 
-Key commands: `about`, `health`, `list`, `use <id>`, `create <id> <onto>`, `info`, `graph`, `docs`, `ingest <path>`, `ingestdir <path>`, `entities`, `entity <name>`, `relations`, `ask <question>`, `query <question>`, `check`, `cleanup`, `tokens`, `token-create`, `token-promote`, `token-set-email`, `backup-create`, `backup-list`, `backup-restore`, `backup-download`, `backup-delete`.
+Key commands: `about`, `health`, `whoami`, `list`, `use <id>`, `create <id> <onto>`, `update`, `info`, `graph`, `delete`, `docs`, `ingest <path>`, `ingestdir <path>`, `entities`, `entity <name>`, `relations`, `ask <question>`, `query <question>`, `check`, `cleanup`, `tokens`, `token-create`, `token-revoke`, `token-update`, `backup-create`, `backup-list`, `backup-restore`, `backup-download`, `backup-delete`, `backup-restore-file`.
 
 ---
 
 ## Testing
 
-Full acceptance test suite (119 tests, 7 phases, 3 token profiles):
+Full acceptance test suite (136 tests, 7 phases, 3 token profiles):
 
 ```bash
 # Direct connection (bypasses WAF rate limiting)
@@ -158,7 +158,7 @@ scripts/
 ├── mcp_cli.py                   # CLI entry point (Click)
 ├── README.md                    # Full documentation (French)
 ├── README.en.md                 # This file (English summary)
-├── test_recette.py              # Full test suite (119 tests, 7 phases)
+├── test_recette.py              # Full test suite (136 tests, 7 phases)
 ├── audit_ontology.py            # Ontology quality audit on a memory
 ├── check_param_descriptions.py  # MCP parameter descriptions checker
 ├── cli/                         # CLI package
@@ -205,4 +205,4 @@ pip install httpx click rich prompt_toolkit
 
 ---
 
-*Graph Memory CLI v2.0.0 — March 2026*
+*Graph Memory CLI v2.0.1 — March 2026*

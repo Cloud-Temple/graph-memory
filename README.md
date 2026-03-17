@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.6.1).
 
-**Dernière version** : v1.6.1 (11 mars 2026) — Isolation multi-tenant durcie (14 failles corrigées), promotion admin déléguée, recette complète 119 tests.
+**Dernière version** : v2.0.1 (17 mars 2026) — CLI v2.0 alignée Live Memory (whoami, token update, --json universel, memory update), 30 outils MCP, recette complète 136 tests.
 
 ---
 
@@ -160,8 +160,8 @@ Question en langage naturel
 - Clé bootstrap pour le premier token + **promotion admin déléguée** (v1.6.1)
 - **Isolation multi-tenant durcie** (v1.6.1) : chaque token ne voit/modifie que ses mémoires autorisées
 - Isolation des données par mémoire (namespace Neo4j)
-- **14 contrôles d'accès** sur les 29 outils MCP (access, write, admin)
-- **Recette automatisée** : 119 tests × 3 profils (admin, read/write, read-only)
+- **14 contrôles d'accès** sur les 30 outils MCP (access, write, admin)
+- **Recette automatisée** : 136 tests × 3 profils (admin, read/write, read-only)
 
 ---
 
@@ -189,7 +189,7 @@ Question en langage naturel
 │  │  • AuthMiddleware (Bearer Token)                               │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools (29 outils)                                         │  │
+│  │  MCP Tools (30 outils)                                         │  │
 │  │  • memory_create/delete/list/stats                             │  │
 │  │  • memory_ingest/search/get_context                            │  │
 │  │  • question_answer / memory_query                              │  │
@@ -390,7 +390,8 @@ mcp> exit                          # Quitter
 | État serveur       | `health`                        | `health`                                          |
 | Lister mémoires    | `memory list`                   | `list`                                            |
 | Créer mémoire      | `memory create ID -o onto`      | `create ID onto`                                  |
-| Supprimer mémoire  | `memory delete ID`              | `delete [ID]`                                     |
+| Modifier mémoire   | `memory update ID`              | `update`                                          |
+| Supprimer mémoire  | `memory delete ID --confirm`    | `delete [ID]`                                     |
 | Info mémoire       | `memory info ID`                | `info`                                            |
 | Graphe texte       | `memory graph ID`               | `graph [ID]`                                      |
 | Entités par type   | `memory entities ID`            | `entities`                                        |
@@ -402,26 +403,27 @@ mcp> exit                          # Quitter
 | Question/Réponse   | `ask ID "question"`             | `ask question`                                    |
 | Query structuré    | `query ID "question"`           | `query question`                                  |
 | Vérif. stockage S3 | `storage check [ID]`            | `check [ID]`                                      |
-| Nettoyage S3       | `storage cleanup [-f]`          | `cleanup [--force]`                               |
+| Nettoyage S3       | `storage cleanup [--confirm]`   | `cleanup [--confirm]`                             |
 | Ontologies dispo.  | `ontologies`                    | `ontologies`                                      |
 | Créer backup       | `backup create ID`              | `backup-create [ID]`                              |
 | Lister backups     | `backup list [ID]`              | `backup-list [ID]`                                |
 | Restaurer backup   | `backup restore BACKUP_ID`      | `backup-restore BACKUP_ID`                        |
 | Télécharger backup | `backup download BACKUP_ID`     | `backup-download BACKUP_ID [--include-documents]` |
 | Supprimer backup   | `backup delete BACKUP_ID`       | `backup-delete BACKUP_ID`                         |
-| Restore fichier    | `backup restore-file PATH`      | *(via Click uniquement)*                          |
+| Restore fichier    | `backup restore-file PATH`      | `backup-restore-file PATH`                        |
 
 ---
 
 ## 🔧 Outils MCP
 
-29 outils exposés via le protocole MCP (Streamable HTTP) :
+30 outils exposés via le protocole MCP (Streamable HTTP) :
 
 ### Gestion des mémoires
 
 | Outil           | Paramètres                                     | Description                                         |
 | --------------- | ---------------------------------------------- | --------------------------------------------------- |
 | `memory_create` | `memory_id`, `name`, `description`, `ontology` | Crée une mémoire avec ontologie                     |
+| `memory_update` | `memory_id`, `name`, `description`             | Modifie le nom ou la description d'une mémoire      |
 | `memory_delete` | `memory_id`                                    | Supprime une mémoire (cascade: docs + entités + S3) |
 | `memory_list`   | —                                              | Liste toutes les mémoires                           |
 | `memory_stats`  | `memory_id`                                    | Statistiques (docs, entités, relations, types)      |
@@ -478,7 +480,7 @@ mcp> exit                          # Quitter
 | `admin_revoke_token` | `token_hash`                          | Révoque un token                                               |
 | `admin_update_token` | `token_hash`, `memory_ids`, `action`  | Modifie les mémoires/permissions/email d'un token              |
 | `system_health`      | —                                     | État de santé des services (Neo4j, S3, LLM, Qdrant, Embedding) |
-| `system_about`       | —                                     | Identité et capacités du service (29 outils, ontologies)        |
+| `system_about`       | —                                     | Identité et capacités du service (30 outils, ontologies)        |
 | `system_whoami`      | —                                     | Identité du token courant (permissions, mémoires, email)        |
 
 ---
@@ -733,10 +735,9 @@ graph-memory/
 │
 ├── scripts/                  # CLI et utilitaires
 │   ├── mcp_cli.py            # Point d'entrée CLI (Click + Shell)
-│   ├── test_recette.py       # Recette complète (119 tests, 7 phases, 3 profils)
+│   ├── test_recette.py       # Recette complète (136 tests, 7 phases, 3 profils)
 │   ├── tests/                # Modules de test modulaires (7 fichiers)
 │   ├── README.md             # Documentation CLI
-│   ├── view_graph.py         # Visualisation graphe en terminal
 │   └── cli/                  # Package CLI
 │       ├── __init__.py
 │       ├── client.py         # Client Streamable HTTP vers le serveur MCP
@@ -887,4 +888,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v2.0.0 — Mars 2026*
+*Graph Memory v2.0.1 — Mars 2026*

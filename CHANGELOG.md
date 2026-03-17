@@ -1,4 +1,36 @@
-# Changelog
+l# Changelog
+
+## [2.0.1] - 2026-03-17
+
+### 🔄 Shell interactif — Synchronisation complète avec Click v2.0
+
+Le shell interactif (`shell.py`) était désynchronisé par rapport aux commandes Click. Cette release aligne entièrement les deux interfaces.
+
+**Ajouté :**
+- **`update`** — Commande shell pour modifier nom/description d'une mémoire (`--name`, `--description`, `-n`, `-d`). Supporte memory_id explicite ou mémoire courante. Aligné sur Click `memory update`.
+- **`token-update`** — Commande unifiée dans le shell avec `--permissions`, `--add-memories`, `--remove-memories`, `--set-memories`, `--email` (aligné sur Click `token update`)
+- **`backup-restore-file`** — Restauration depuis archive tar.gz locale avec `--confirm` (aligné sur Click `backup restore-file`)
+- **`--json` universel** — Toutes les commandes du shell supportent désormais `--json` (about, health, whoami, tokens, token-create, token-revoke, token-update, ontologies, check, cleanup, create, update, ingest, ingestdir, deldoc, delete, backup-*)
+- **URL serveur dans le bandeau** — Le shell affiche l'URL du serveur MCP au lancement (plus de confusion dev/prod)
+- **Helper `_json_or_show()`** — Fonction unifiée pour l'affichage JSON/Rich dans tous les handlers
+- **4 tests `memory_update`** dans `test_memories.py` (3.11–3.14) : admin update name+description, client_rw update sa mémoire, client_rw refusé hors scope, client_ro refusé read-only
+
+**Modifié :**
+- **`cleanup --confirm`** remplace `--force` comme option principale (`--force` reste comme alias backward compat)
+- **Aliases legacy** (token-grant, token-ungrant, token-set, token-promote, token-set-email) appellent désormais `cmd_token_update` en interne avec un message "💡 Préférez: token-update"
+- **`token-create`** — Parsing amélioré avec `shlex.split()` + support `--expires N`
+- **Autocomplete** — Ajout de `update`, `token-update`, `backup-restore-file`, `--confirm`, `--permissions`, `--add-memories`, `--remove-memories`, `--set-memories`, `--email`, `--expires`
+- **Table HELP** — Restructurée, `update` et `token-update` en vedette, aliases legacy signalés en note
+- **Docstring module** — Entièrement réécrite avec toutes les commandes organisées par catégorie
+- **Dispatch `run_shell()`** — Réorganisé par catégorie (Serveur → Mémoires → Documents → Exploration → Stockage → Tokens → Backup)
+- **READMEs scripts** — `scripts/README.md` et `scripts/README.en.md` mis à jour (memory update, tokens v2.0, 136 tests)
+
+### 📊 Métriques
+- shell.py : ~1280 lignes (vs ~760 avant, +update, +token-update, +backup-restore-file, +--json universel)
+- Recette : **136 tests** (vs 119, +17 assertions dont 4 tests memory_update)
+- VERSION bump 2.0.0 → 2.0.1
+
+---
 
 ## [2.0.0] - 2026-03-16
 

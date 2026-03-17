@@ -200,6 +200,33 @@ def memory_create(ctx, memory_id, name, description, ontology, jflag):
     }, lambda r: show_success(f"Mémoire '{memory_id}' créée (ontologie: {r.get('ontology')})"), jflag)
 
 
+@memory.command("update")
+@click.argument("memory_id")
+@click.option("--name", "-n", default=None, help="Nouveau nom")
+@click.option("--description", "-d", default=None, help="Nouvelle description")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def memory_update(ctx, memory_id, name, description, jflag):
+    """✏️  Modifier le nom ou la description d'une mémoire.
+
+    \b
+    Exemples:
+      memory update JURIDIQUE -n "Nouveau nom"
+      memory update JURIDIQUE -d "Nouvelle description"
+      memory update JURIDIQUE -n "Nom" -d "Description"
+    """
+    args = {"memory_id": memory_id}
+    if name:
+        args["name"] = name
+    if description:
+        args["description"] = description
+    if not name and not description:
+        show_error("Rien à modifier. Utilisez --name et/ou --description.")
+        return
+    _run_tool(ctx, "memory_update", args,
+              lambda r: show_success(f"Mémoire '{memory_id}' mise à jour: {r.get('name')} — {r.get('description', '')}"), jflag)
+
+
 @memory.command("delete")
 @click.argument("memory_id")
 @click.option("--confirm", is_flag=True, help="Confirmer la suppression")

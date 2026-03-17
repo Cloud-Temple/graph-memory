@@ -90,3 +90,41 @@ async def run(admin: MCPClient, client_rw: MCPClient, client_ro: MCPClient, **ct
     print("\n  📋 3.10 — memory_stats MEMORY_A (client_ro, refusé)")
     result = await client_ro.call_tool("memory_stats", {"memory_id": MEMORY_A})
     assert_error(result, "memory_stats MEMORY_A refusé (client_ro)", "refusé")
+
+    # --- memory_update ---
+
+    # 3.11 — Admin peut mettre à jour MEMORY_B (name + description)
+    print("\n  📋 3.11 — memory_update MEMORY_B (admin, name + description)")
+    result = await admin.call_tool("memory_update", {
+        "memory_id": MEMORY_B, "name": "Test B Updated", "description": "Updated by admin"
+    })
+    if assert_ok(result, "memory_update MEMORY_B (admin)"):
+        if result.get("name") == "Test B Updated":
+            ok("  → name mis à jour")
+        else:
+            fail("  → name attendu 'Test B Updated'", f"Reçu: {result.get('name')}")
+        if result.get("description") == "Updated by admin":
+            ok("  → description mise à jour")
+        else:
+            fail("  → description attendue 'Updated by admin'", f"Reçu: {result.get('description')}")
+
+    # 3.12 — client_rw peut mettre à jour sa propre mémoire MEMORY_A
+    print("\n  📋 3.12 — memory_update MEMORY_A (client_rw, sa mémoire)")
+    result = await client_rw.call_tool("memory_update", {
+        "memory_id": MEMORY_A, "name": "Test A Updated"
+    })
+    assert_ok(result, "memory_update MEMORY_A (client_rw)")
+
+    # 3.13 — client_rw ne peut PAS mettre à jour MEMORY_B (hors scope)
+    print("\n  📋 3.13 — memory_update MEMORY_B (client_rw, refusé)")
+    result = await client_rw.call_tool("memory_update", {
+        "memory_id": MEMORY_B, "name": "Hack"
+    })
+    assert_error(result, "memory_update MEMORY_B refusé (client_rw)", "refusé")
+
+    # 3.14 — client_ro ne peut PAS mettre à jour (read-only)
+    print("\n  📋 3.14 — memory_update MEMORY_B (client_ro, read-only)")
+    result = await client_ro.call_tool("memory_update", {
+        "memory_id": MEMORY_B, "name": "Hack"
+    })
+    assert_error(result, "memory_update refusé (read-only)", "refusé")

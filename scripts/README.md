@@ -107,9 +107,14 @@ python scripts/mcp_cli.py memory list
 # Créer une mémoire (ontologie obligatoire)
 python scripts/mcp_cli.py memory create JURIDIQUE -n "Corpus Juridique" -d "Contrats CT" -o legal
 
-# Supprimer une mémoire (avec confirmation, ou -f pour forcer)
+# Modifier le nom ou la description d'une mémoire
+python scripts/mcp_cli.py memory update JURIDIQUE -n "Nouveau nom"
+python scripts/mcp_cli.py memory update JURIDIQUE -d "Nouvelle description"
+python scripts/mcp_cli.py memory update JURIDIQUE -n "Nom" -d "Description"
+
+# Supprimer une mémoire (avec confirmation, ou --confirm pour forcer)
 python scripts/mcp_cli.py memory delete JURIDIQUE
-python scripts/mcp_cli.py memory delete JURIDIQUE -f
+python scripts/mcp_cli.py memory delete JURIDIQUE --confirm
 
 # Info / statistiques
 python scripts/mcp_cli.py memory info JURIDIQUE
@@ -302,11 +307,12 @@ Fonctionnalités :
 | `health`             | État de santé (S3, Neo4j, LLMaaS, Qdrant, Embedding) |
 | `whoami`             | Identité du token courant (permissions, mémoires)    |
 | `list`               | Lister les mémoires                                  |
-| `use <id>`           | Sélectionner une mémoire      |
-| `create <id> <onto>` | Créer une mémoire             |
-| `info`               | Résumé de la mémoire courante |
-| `graph`              | Graphe complet                |
-| `delete [id]`        | Supprimer une mémoire         |
+| `use <id>`           | Sélectionner une mémoire                             |
+| `create <id> <onto>` | Créer une mémoire                                    |
+| `update`             | Modifier nom/description (`--name`, `--description`) |
+| `info`               | Résumé de la mémoire courante                        |
+| `graph`              | Graphe complet                                       |
+| `delete [id]`        | Supprimer une mémoire                                |
 
 #### Documents
 
@@ -331,9 +337,9 @@ Fonctionnalités :
 
 | Commande            | Description                  |
 | ------------------- | ---------------------------- |
-| `check [id]`        | Vérifier cohérence S3/graphe |
-| `cleanup [--force]` | Nettoyer les orphelins S3    |
-| `ontologies`        | Lister les ontologies        |
+| `check [id]`           | Vérifier cohérence S3/graphe |
+| `cleanup [--confirm]`  | Nettoyer les orphelins S3 (`--force` accepté comme alias) |
+| `ontologies`           | Lister les ontologies        |
 
 #### 🔑 Tokens
 
@@ -358,6 +364,7 @@ Fonctionnalités :
 | `backup-restore <backup_id>`             | Restaurer depuis un backup S3                                    |
 | `backup-download <backup_id> [fichier]`  | Télécharger en tar.gz (`--include-documents` pour offline)       |
 | `backup-delete <backup_id>`              | Supprimer un backup                                              |
+| `backup-restore-file <path>`             | Restaurer depuis une archive tar.gz locale (`--confirm`)         |
 
 > **`--include-documents`** : ajouter à `backup-download` pour inclure les documents originaux (PDF, DOCX…) dans l'archive. Sans cette option, seuls graphe + vecteurs sont inclus.
 
@@ -379,6 +386,10 @@ Fonctionnalités :
 🧠 no memory: token-create quoteflow --email user@example.com
 🧠 no memory: token-create quoteflow read,write JURIDIQUE,CLOUD
 🧠 no memory: token-revoke e4914bbb828ae97fa25c9adf0cc229273dff401b088cb2aaac900bfa1c650a24
+🧠 no memory: token-update e4914bbb... --add-memories JURIDIQUE,CLOUD
+🧠 no memory: token-update e4914bbb... --permissions admin,read,write
+🧠 no memory: token-update e4914bbb... --email user@cloud-temple.com
+# Aliases legacy (toujours fonctionnels) :
 🧠 no memory: token-grant e4914bbb... JURIDIQUE CLOUD
 🧠 no memory: token-promote e4914bbb... admin,read,write
 ```
@@ -393,20 +404,23 @@ Fonctionnalités :
 | `help`      | Aide                                                        |
 | `exit`      | Quitter                                                     |
 
-#### Option `--json` (v0.6.5)
+#### Option `--json` (v2.0.1 — universel)
 
-Ajoutez `--json` à n'importe quelle commande de consultation pour obtenir le JSON brut du serveur **sans formatage Rich**. Idéal pour le scripting ou le pipe vers `jq`.
+Ajoutez `--json` à **n'importe quelle commande** pour obtenir le JSON brut du serveur **sans formatage Rich**. Idéal pour le scripting ou le pipe vers `jq`.
 
 ```bash
 # Exemples dans le shell interactif
-🧠 JURIDIQUE: query --json réversibilité des données
-🧠 JURIDIQUE: ask --json quelles sont les garanties ?
-🧠 JURIDIQUE: entities --json
 🧠 JURIDIQUE: list --json
+🧠 JURIDIQUE: health --json
+🧠 JURIDIQUE: whoami --json
+🧠 JURIDIQUE: tokens --json
+🧠 JURIDIQUE: entities --json
+🧠 JURIDIQUE: ask --json quelles sont les garanties ?
+🧠 JURIDIQUE: backup-list --json
 🧠 JURIDIQUE: --json graph          # --json peut être n'importe où
 ```
 
-**Commandes supportées** : `list`, `info`, `graph`, `docs`, `entities`, `entity`, `relations`, `ask`, `query`.
+> **Note v2.0.1** : Depuis la v2.0.1, `--json` est supporté par **toutes** les commandes du shell (pas seulement les commandes de consultation). C'est aligné avec le CLI Click où `--json/-j` est universel depuis la v2.0.0.
 
 ---
 
@@ -417,7 +431,7 @@ scripts/
 ├── mcp_cli.py                   # Point d'entrée CLI (Click)
 ├── README.md                    # Ce fichier
 ├── README.en.md                 # Version anglaise
-├── test_recette.py              # Recette complète (119 tests, 7 phases)
+├── test_recette.py              # Recette complète (136 tests, 7 phases)
 ├── audit_ontology.py            # Audit qualité ontologie sur une mémoire
 ├── check_param_descriptions.py  # Vérification descriptions paramètres MCP
 ├── cli/                         # Package CLI
@@ -493,4 +507,4 @@ pip install httpx click rich prompt_toolkit
 
 ---
 
-*Graph Memory CLI v2.0.0 — Mars 2026*
+*Graph Memory CLI v2.0.1 — Mars 2026*
