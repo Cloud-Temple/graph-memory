@@ -2151,7 +2151,7 @@ async def system_about() -> dict:
                             "Le RAG vectoriel intervient en complément (Graph-Guided RAG) "
                             "pour enrichir les réponses avec des extraits textuels précis.",
                 "provider": "Cloud Temple",
-                "repo": "https://github.com/chrlesur/graph-memory.git",
+                "repo": "https://github.com/Cloud-Temple/graph-memory.git",
             },
             "capabilities": {
                 "total_tools": total_tools,

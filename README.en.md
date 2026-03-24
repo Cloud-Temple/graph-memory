@@ -92,7 +92,7 @@ Question (natural language)
 
 ```bash
 # Clone
-git clone https://github.com/chrlesur/graph-memory.git
+git clone https://github.com/Cloud-Temple/graph-memory.git
 cd graph-memory
 
 # Configure

@@ -234,7 +234,7 @@ Question en langage naturel
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/chrlesur/graph-memory.git
+git clone https://github.com/Cloud-Temple/graph-memory.git
 cd graph-memory
 
 # Copier la configuration

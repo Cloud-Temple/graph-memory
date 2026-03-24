@@ -1,6 +1,6 @@
 # Guide d'intégration — Graph Memory + Cline (VS Code)
 
-> **Version** : 1.0 | **Date** : 8 mars 2026
+> **Version** : 2.0 | **Date** : 17 mars 2026
 > **Audience** : Développeurs et utilisateurs de Cline dans VS Code
 > **Prérequis** : Graph Memory déployé (local ou distant), extension Cline installée
 
@@ -14,7 +14,7 @@
 4. [Configuration détaillée](#4-configuration-détaillée)
 5. [Premiers pas avec Cline](#5-premiers-pas-avec-cline)
 6. [Cas d'usage courants](#6-cas-dusage-courants)
-7. [Les 27 outils à disposition](#7-les-27-outils-à-disposition)
+7. [Les 30 outils à disposition](#7-les-30-outils-à-disposition)
 8. [Bonnes pratiques](#8-bonnes-pratiques)
 9. [Dépannage](#9-dépannage)
 10. [Architecture technique](#10-architecture-technique)
@@ -45,11 +45,11 @@
 │  └──────────┬────────────────────┘  │
 │             │ appel MCP tool        │
 └─────────────┼───────────────────────┘
-              │ HTTP/SSE
+              │ Streamable HTTP
               ▼
 ┌─────────────────────────────────────┐
 │  Graph Memory (serveur MCP)         │
-│  27 outils : ingestion, Q&A,       │
+│  30 outils : ingestion, Q&A,       │
 │  recherche, backup, admin…          │
 │  Neo4j + Qdrant + S3 + LLM         │
 └─────────────────────────────────────┘
@@ -113,7 +113,7 @@ Ou utilisez directement la clé `ADMIN_BOOTSTRAP_KEY` du fichier `.env` (accès 
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/sse",
+      "url": "http://localhost:8080/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN_ICI"
       }
@@ -132,7 +132,7 @@ Dans le chat Cline, tapez :
 
 Cline devrait appeler `system_health` et afficher l'état des 5 services (Neo4j, S3, LLMaaS, Qdrant, Embedding).
 
-**C'est prêt !** 🎉 Cline a maintenant accès aux 27 outils Graph Memory.
+**C'est prêt !** 🎉 Cline a maintenant accès aux 30 outils Graph Memory.
 
 ---
 
@@ -151,7 +151,7 @@ Le fichier `cline_mcp_settings.json` se trouve typiquement à :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/sse",
+      "url": "http://localhost:8080/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_BOOTSTRAP_KEY"
       }
@@ -166,7 +166,7 @@ Le fichier `cline_mcp_settings.json` se trouve typiquement à :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "https://graph-mem.votre-domaine.com/sse",
+      "url": "https://graph-mem.votre-domaine.com/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN_PRODUCTION"
       }
@@ -183,13 +183,13 @@ Vous pouvez combiner Graph Memory avec d'autres serveurs MCP :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/sse",
+      "url": "http://localhost:8080/mcp",
       "headers": {
         "Authorization": "Bearer TOKEN_GRAPH_MEMORY"
       }
     },
     "live-memory": {
-      "url": "http://localhost:8081/sse",
+      "url": "http://localhost:8081/mcp",
       "headers": {
         "Authorization": "Bearer TOKEN_LIVE_MEMORY"
       }
@@ -306,20 +306,21 @@ Cline : 3 backups trouvés : [tableau avec dates, stats, tailles]
 
 ---
 
-## 7. Les 27 outils à disposition
+## 7. Les 30 outils à disposition
 
 Cline a accès à tous ces outils. Il choisit automatiquement le bon outil selon votre demande.
 
 | Catégorie | Outils | Ce que vous pouvez demander |
 |-----------|--------|---------------------------|
-| **Mémoires** (4) | `memory_create`, `memory_delete`, `memory_list`, `memory_stats` | "Crée une mémoire", "Liste mes mémoires", "Stats de JURIDIQUE" |
+| **Mémoires** (5) | `memory_create`, `memory_update`, `memory_delete`, `memory_list`, `memory_stats` | "Crée une mémoire", "Renomme JURIDIQUE", "Stats de DOCS" |
 | **Documents** (4) | `memory_ingest`, `document_list`, `document_get`, `document_delete` | "Ingère ce fichier", "Liste les documents", "Supprime ce doc" |
 | **Recherche/Q&A** (4) | `memory_search`, `memory_get_context`, `question_answer`, `memory_query` | "Cherche X", "Contexte de Y", "Question sur Z" |
+| **Graphe** (1) | `memory_graph` | "Montre le graphe complet de JURIDIQUE" |
 | **Ontologies** (1) | `ontology_list` | "Quelles ontologies sont disponibles ?" |
 | **Stockage** (2) | `storage_check`, `storage_cleanup` | "Vérifie la cohérence", "Nettoie les orphelins" |
 | **Backup** (6) | `backup_create`, `backup_list`, `backup_restore`, `backup_download`, `backup_delete`, `backup_restore_archive` | "Sauvegarde JURIDIQUE", "Restaure ce backup" |
 | **Admin** (4) | `admin_create_token`, `admin_list_tokens`, `admin_revoke_token`, `admin_update_token` | "Crée un token read-only", "Liste les tokens" |
-| **Système** (2) | `system_health`, `system_about` | "État de santé ?", "Capacités du service ?" |
+| **Système** (3) | `system_health`, `system_about`, `system_whoami` | "État de santé ?", "Qui suis-je ?", "Capacités ?" |
 
 ### Outils les plus utilisés
 
@@ -388,7 +389,8 @@ avec l'ontologie legal, puis utilise question_answer pour répondre aux question
 1. Vérifiez que le fichier `cline_mcp_settings.json` est correct (JSON valide)
 2. Redémarrez VS Code après modification de la config
 3. Vérifiez que le serveur est accessible : `curl http://localhost:8080/health`
-4. Vérifiez dans Cline : **Cmd+Shift+P** → `Cline: MCP Servers` → le serveur doit apparaître en vert
+4. Testez l'endpoint MCP : `curl -v http://localhost:8080/mcp`
+5. Vérifiez dans Cline : **Cmd+Shift+P** → `Cline: MCP Servers` → le serveur doit apparaître en vert
 
 ### 9.2 Erreur 401 (Unauthorized)
 
@@ -406,7 +408,7 @@ avec l'ontologie legal, puis utilise question_answer pour répondre aux question
 **Solutions** :
 1. Vérifiez que Docker est lancé : `docker compose ps`
 2. Vérifiez que le WAF est healthy : `docker compose logs waf --tail 10`
-3. Testez l'URL : `curl -v http://localhost:8080/sse`
+3. Testez l'URL : `curl -v http://localhost:8080/mcp`
 
 ### 9.4 L'ingestion échoue
 
@@ -437,13 +439,13 @@ avec l'ontologie legal, puis utilise question_answer pour répondre aux question
 ```
 1. L'utilisateur pose une question dans le chat Cline
 2. Le LLM de Cline décide d'utiliser un outil MCP (ex: question_answer)
-3. Cline envoie une requête HTTP/SSE à http://localhost:8080/sse
+3. Cline envoie une requête Streamable HTTP à http://localhost:8080/mcp
    avec le header Authorization: Bearer TOKEN
 4. Le WAF Coraza valide la requête (rate limiting, OWASP CRS)
 5. Le service MCP reçoit l'appel tool
 6. AuthMiddleware vérifie le token et les permissions
 7. L'outil est exécuté (requête Neo4j + Qdrant + LLM)
-8. Le résultat est renvoyé via SSE à Cline
+8. Le résultat est renvoyé via Streamable HTTP à Cline
 9. Le LLM de Cline formule la réponse finale à l'utilisateur
 ```
 
@@ -472,5 +474,5 @@ Cette interface permet de :
 
 ---
 
-*Guide d'intégration Graph Memory + Cline — v1.0 — Mars 2026*
+*Guide d'intégration Graph Memory + Cline — v2.0 — Mars 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*

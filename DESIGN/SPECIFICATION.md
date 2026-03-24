@@ -1,8 +1,8 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 1.5.0 | **Date** : 11 mars 2026
+> **Version** : 2.0.1 | **Date** : 17 mars 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
-> **Repository** : https://github.com/chrlesur/graph-memory
+> **Repository** : https://github.com/Cloud-Temple/graph-memory
 
 ---
 
@@ -11,7 +11,7 @@
 1. [Vision & Objectifs](#1-vision--objectifs)
 2. [Architecture](#2-architecture)
 3. [Modèle de données](#3-modèle-de-données)
-4. [Outils MCP](#4-outils-mcp--28-outils)
+4. [Outils MCP](#4-outils-mcp--30-outils)
 5. [Pipeline d'ingestion](#5-pipeline-dingestion)
 6. [Pipeline de recherche & Q&A](#6-pipeline-de-recherche--qa)
 7. [Système d'ontologies](#7-système-dontologies)
@@ -65,8 +65,8 @@ Les systèmes RAG (Retrieval-Augmented Generation) traditionnels souffrent de li
 
 ### 1.5 Périmètre
 
-**Inclus (v1.4.0)** :
-- Serveur MCP Streamable HTTP (28 outils)
+**Inclus (v2.0.1)** :
+- Serveur MCP Streamable HTTP (30 outils)
 - 6 ontologies (legal, cloud, managed-services, presales, general, software-development)
 - Interface web interactive (graphe vis-network, panneau Q&A)
 - CLI complète (Click scriptable + Shell interactif)
@@ -165,10 +165,10 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
 │  │  → mcp.streamable_http_app()                                   │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools Layer (28 outils)                                   │  │
-│  │  • Memory CRUD (4)    • Documents (4)   • Recherche/Q&A (4)    │  │
-│  │  • Ontologies (1)     • Storage S3 (2)  • Admin tokens (4)     │  │
-│  │  • Backup/Restore (6) • System (2)                             │  │
+│  │  MCP Tools Layer (30 outils)                                   │  │
+│  │  • Memory CRUD (5)    • Documents (4)   • Recherche/Q&A (4)    │  │
+│  │  • Graphe (1)         • Ontologies (1)  • Storage S3 (2)       │  │
+│  │  • Admin tokens (4)   • Backup/Restore (6) • System (3)        │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │  Core Services                                                 │  │
@@ -330,18 +330,19 @@ Chaque mémoire a sa propre collection Qdrant :
 └── _health_check/                    # Fichier de test connectivité
 ```
 
-## 4. Outils MCP — 28 outils
+## 4. Outils MCP — 30 outils
 
-### 4.1 Gestion des mémoires (4 outils)
+### 4.1 Gestion des mémoires (5 outils)
 
 | Outil           | Paramètres                                      | Auth      | Description                                                 |
 | --------------- | ----------------------------------------------- | --------- | ----------------------------------------------------------- |
 | `memory_create` | `memory_id`, `name`, `ontology`, `description?` | 🔑 write | Crée une mémoire avec ontologie obligatoire (copiée sur S3) |
+| `memory_update` | `memory_id`, `name?`, `description?`            | 🔑 write | Modifie les métadonnées (nom, description) d'une mémoire    |
 | `memory_delete` | `memory_id`                                     | 🔑 write | Supprime tout : Neo4j + Qdrant + S3 (cascade)               |
 | `memory_list`   | —                                               | 🔑 read  | Liste les mémoires accessibles au token                     |
 | `memory_stats`  | `memory_id`                                     | 🔑 read  | Stats : docs, entités, relations, types                     |
 
-> **Note** : Le graphe complet d'une mémoire est accessible via l'API REST `GET /api/graph/{id}` (voir §10.3), et non via un outil MCP.
+> **Note** : `memory_create` ajoute automatiquement la mémoire aux `memory_ids` du token créateur (auto-ajout), évitant un round-trip admin pour les clients restreints.
 
 ### 4.2 Documents (4 outils)
 
@@ -365,20 +366,28 @@ Chaque mémoire a sa propre collection Qdrant :
 - `question_answer` : appelle le LLM pour générer une réponse en langage naturel avec citations
 - `memory_query` : même pipeline de recherche (graphe + RAG) mais retourne les données brutes (entités enrichies, chunks RAG avec scores, documents sources) — idéal pour les agents qui construisent leur propre réponse
 
-### 4.4 Ontologies (1 outil)
+### 4.4 Graphe (1 outil)
+
+| Outil          | Paramètres                   | Auth     | Description                                                          |
+| -------------- | ---------------------------- | -------- | -------------------------------------------------------------------- |
+| `memory_graph` | `memory_id`, `format?`       | 🔑 read | Graphe complet d'une mémoire (format: full, nodes, edges, documents) |
+
+> **Note** : Le graphe est également accessible via l'API REST `GET /api/graph/{id}` (voir §10.3).
+
+### 4.5 Ontologies (1 outil)
 
 | Outil           | Paramètres | Auth     | Description                                 |
 | --------------- | ---------- | -------- | ------------------------------------------- |
 | `ontology_list` | —          | 🔑 read | Liste les ontologies disponibles avec stats |
 
-### 4.5 Stockage S3 (2 outils)
+### 4.6 Stockage S3 (2 outils)
 
 | Outil             | Paramètres   | Auth      | Description                                              |
 | ----------------- | ------------ | --------- | -------------------------------------------------------- |
 | `storage_check`   | `memory_id?` | 🔑 read  | Vérifie cohérence graphe ↔ S3 (accessibilité, orphelins) |
 | `storage_cleanup` | `dry_run?`   | 🔑 write | Nettoie les fichiers S3 orphelins                        |
 
-### 4.6 Administration tokens (4 outils)
+### 4.7 Administration tokens (4 outils)
 
 | Outil                | Paramètres                                                                 | Auth      | Description                                             |
 | -------------------- | -------------------------------------------------------------------------- | --------- | ------------------------------------------------------- |
@@ -387,7 +396,7 @@ Chaque mémoire a sa propre collection Qdrant :
 | `admin_revoke_token` | `token_hash_prefix`                                                        | 👑 admin | Révoque un token par préfixe de hash                    |
 | `admin_update_token` | `token_hash_prefix`, `add_memories?`, `remove_memories?`, `set_memories?`  | 👑 admin | Modifie les mémoires autorisées (add/remove/set)        |
 
-### 4.7 Backup & Restore (6 outils)
+### 4.8 Backup & Restore (6 outils)
 
 | Outil                    | Paramètres                        | Auth      | Description                                             |
 | ------------------------ | --------------------------------- | --------- | ------------------------------------------------------- |
@@ -398,14 +407,15 @@ Chaque mémoire a sa propre collection Qdrant :
 | `backup_delete`          | `backup_id`                       | 🔑 write | Supprime un backup de S3                                |
 | `backup_restore_archive` | `archive_base64`                  | 🔑 write | Restaure depuis tar.gz local (re-upload S3 + checksums) |
 
-### 4.8 Système (2 outils)
+### 4.9 Système (3 outils)
 
-| Outil           | Paramètres | Auth | Description                                                         |
-| --------------- | ---------- | ---- | ------------------------------------------------------------------- |
-| `system_health` | —          | —    | État de santé des 5 services (Neo4j, S3, LLMaaS, Qdrant, Embedding) |
-| `system_about`  | —          | —    | Carte d'identité complète (version, capacités, mémoires, config)    |
+| Outil           | Paramètres | Auth     | Description                                                         |
+| --------------- | ---------- | -------- | ------------------------------------------------------------------- |
+| `system_health` | —          | —        | État de santé des 5 services (Neo4j, S3, LLMaaS, Qdrant, Embedding) |
+| `system_about`  | —          | —        | Carte d'identité complète (version, capacités, mémoires, config)    |
+| `system_whoami` | —          | 🔑 read | Identité du token courant (type, permissions, mémoires, email)      |
 
-### 4.9 Légende des permissions
+### 4.10 Légende des permissions
 
 | Icône     | Permission           | Description                                        |
 | --------- | -------------------- | -------------------------------------------------- |
@@ -947,13 +957,17 @@ scripts/
 ### 11.3 Mode Click (scriptable)
 
 ```bash
-python scripts/mcp_cli.py health
-python scripts/mcp_cli.py memory list
+python scripts/mcp_cli.py health                           # État des 5 services
+python scripts/mcp_cli.py whoami                            # Identité du token
+python scripts/mcp_cli.py memory list                       # Liste des mémoires
 python scripts/mcp_cli.py memory create JURIDIQUE -n "Corpus" -o legal
+python scripts/mcp_cli.py memory update JURIDIQUE -n "Nouveau nom"
+python scripts/mcp_cli.py memory delete JURIDIQUE --confirm # Suppression avec confirmation
 python scripts/mcp_cli.py document ingest JURIDIQUE /path/to/doc.pdf
 python scripts/mcp_cli.py ask JURIDIQUE "Quelles sont les clauses de résiliation ?"
 python scripts/mcp_cli.py backup create JURIDIQUE
-python scripts/mcp_cli.py about
+python scripts/mcp_cli.py token update HASH --add-memories MEM1,MEM2 --permissions admin
+python scripts/mcp_cli.py about --json                      # Sortie JSON scriptable
 ```
 
 ### 11.4 Mode Shell (interactif)
@@ -964,9 +978,11 @@ python scripts/mcp_cli.py shell
 mcp> list
 mcp> use JURIDIQUE
 mcp[JURIDIQUE]> ingest /path/to/doc.pdf
+mcp[JURIDIQUE]> update --name "Nouveau nom"
 mcp[JURIDIQUE]> entities
 mcp[JURIDIQUE]> ask Quelles sont les obligations du client ?
 mcp[JURIDIQUE]> backup-create
+mcp[JURIDIQUE]> token-update HASH --add-memories MEM1,MEM2
 ```
 
 **Fonctionnalités shell** :
@@ -975,6 +991,29 @@ mcp[JURIDIQUE]> backup-create
 - `use ID` pour sélectionner la mémoire courante
 - Option `--json` sur toute commande de consultation
 - Progression temps réel d'ingestion (barres ASCII, compteurs, phases)
+- Anciennes commandes token conservées comme aliases de transition
+
+### 11.6 Refonte CLI v2.0.0 (breaking changes)
+
+La v2.0.0 introduit des changements structurants pour améliorer la cohérence et la scriptabilité :
+
+| Changement | Avant (v1.x) | Après (v2.0.0+) |
+|-----------|--------------|-----------------|
+| **health** | Listait les mémoires | Teste les 5 services via `system_health` |
+| **Token management** | 5 commandes (`grant`, `ungrant`, `set-memories`, `promote`, `set-email`) | 1 commande `token update` avec flags |
+| **Opérations destructives** | `--force` | `--confirm` (langage plus explicite) |
+| **Sortie scriptable** | Disponible sur quelques commandes | `--json` universel sur toutes les commandes |
+| **Boilerplate interne** | ~600 lignes répétitives | Pattern `_run_tool()` commun (helper) |
+
+**Commande `token update` unifiée** :
+```bash
+# Remplace grant/ungrant/set-memories/promote/set-email
+token update HASH --add-memories MEM1,MEM2
+token update HASH --remove-memories MEM1
+token update HASH --set-memories MEM1,MEM2    # Remplace toute la liste
+token update HASH --permissions admin
+token update HASH --email user@example.com
+```
 
 ### 11.5 Variables CLI
 
@@ -1099,7 +1138,7 @@ Agents IA (Cline, Claude, ...)
 ### 14.1 Développement local
 
 ```bash
-git clone https://github.com/chrlesur/graph-memory.git
+git clone https://github.com/Cloud-Temple/graph-memory.git
 cd graph-memory
 cp .env.example .env
 # Éditer .env avec vos credentials
@@ -1185,7 +1224,7 @@ graph-memory/
 ├── starter-kit/              # Kit pour créer un nouveau service MCP
 │
 └── src/mcp_memory/           # Code source service
-    ├── server.py             # Serveur MCP + 28 outils
+    ├── server.py             # Serveur MCP + 30 outils
     ├── config.py             # Configuration pydantic-settings
     ├── auth/                 # Authentification
     │   ├── context.py        # ContextVar + check_memory_access
@@ -1232,5 +1271,5 @@ graph-memory/
 
 ---
 
-*Graph Memory v1.5.0 — Cahier de Spécification — 11 mars 2026*
+*Graph Memory v2.0.1 — Cahier de Spécification — 17 mars 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*
