@@ -2,6 +2,10 @@
  * MCP Memory - Panneau ASK (question/réponse) avec highlight graphe,
  * mode "Focus Question" (isolation du sous-graphe pertinent),
  * redimensionnement par drag, et export HTML de la réponse.
+ *
+ * CSP-compliant : aucun inline handler (onclick) ni inline style.
+ * Les événements dynamiques utilisent la délégation sur #askBody.
+ * Les classes CSS remplacent les styles inline.
  */
 
 // Stocke les entités de la dernière réponse (pour le bouton Isoler)
@@ -40,8 +44,8 @@ async function submitQuestion() {
     const body = document.getElementById('askBody');
     const btn = document.getElementById('askSubmitBtn');
 
-    // Afficher le loading
-    body.innerHTML = '<div class="ask-loading"><div class="spinner" style="width:30px;height:30px;border-width:3px;margin:0 auto 0.5rem"></div>Réflexion en cours…</div>';
+    // Afficher le loading (classes CSS au lieu de styles inline)
+    body.innerHTML = '<div class="ask-loading"><div class="spinner ask-spinner-sm"></div>Réflexion en cours…</div>';
     btn.disabled = true;
     lastAnswerEntities = [];
     lastAnswerResult = null;
@@ -59,10 +63,10 @@ async function submitQuestion() {
                 highlightEntities(result.entities);
             }
         } else {
-            body.innerHTML = `<div style="color:#e74c3c">❌ ${result.message || 'Erreur'}</div>`;
+            body.innerHTML = `<div class="text-error">❌ ${result.message || 'Erreur'}</div>`;
         }
     } catch (err) {
-        body.innerHTML = `<div style="color:#e74c3c">❌ Erreur réseau: ${err.message}</div>`;
+        body.innerHTML = `<div class="text-error">❌ Erreur réseau: ${err.message}</div>`;
     } finally {
         btn.disabled = false;
     }
@@ -79,9 +83,9 @@ function displayAnswer(result) {
 
     // Entités trouvées (cliquables → focus dans le graphe)
     if (result.entities && result.entities.length > 0) {
-        html += '<div class="ask-entities"><span style="font-size:0.72rem;color:#888;margin-right:0.3rem">🔗 Entités:</span>';
+        html += '<div class="ask-entities"><span class="ask-entities-label">🔗 Entités:</span>';
         result.entities.forEach(name => {
-            html += `<span class="ask-entity-tag" onclick="focusNode('${escapeHtml(name)}')" title="Voir dans le graphe">${escapeHtml(name)}</span>`;
+            html += `<span class="ask-entity-tag" data-action="focus-node" data-node-id="${escapeHtml(name)}" title="Voir dans le graphe">${escapeHtml(name)}</span>`;
         });
         html += '</div>';
     }
@@ -89,7 +93,7 @@ function displayAnswer(result) {
     // Documents sources (affichage en liste)
     if (result.source_documents && result.source_documents.length > 0) {
         html += `<div class="ask-sources">
-            <div style="font-size:0.72rem;color:#888;margin-bottom:0.3rem">📄 Sources (${result.source_documents.length}):</div>`;
+            <div class="ask-sources-label">📄 Sources (${result.source_documents.length}):</div>`;
         result.source_documents.forEach(doc => {
             const name = doc.filename || doc.id || '?';
             html += `<div class="ask-source-item">📄 ${escapeHtml(name)}</div>`;
@@ -101,13 +105,13 @@ function displayAnswer(result) {
     html += '<div class="ask-actions">';
 
     if (result.entities && result.entities.length > 0) {
-        html += `<button class="ask-isolate-btn" onclick="isolateFromAsk()" title="Afficher uniquement le sous-graphe lié à cette question">
+        html += `<button class="ask-isolate-btn" data-action="isolate-from-ask" title="Afficher uniquement le sous-graphe lié à cette question">
             🔬 Isoler le sujet
         </button>`;
     }
 
     // Bouton Export HTML (toujours visible quand il y a une réponse)
-    html += `<button class="ask-export-btn" onclick="exportAnswerHtml()" title="Télécharger la réponse en HTML">
+    html += `<button class="ask-export-btn" data-action="export-answer-html" title="Télécharger la réponse en HTML">
         📥 Export HTML
     </button>`;
 
@@ -128,6 +132,7 @@ function isolateFromAsk() {
 /**
  * Génère un fichier HTML autonome avec la réponse formatée et le télécharge.
  * Le HTML contient le CSS inline pour un beau rendu même hors du site.
+ * Note: le fichier téléchargé n'est pas affecté par la CSP de la page.
  */
 function exportAnswerHtml() {
     if (!lastAnswerResult) return;
@@ -378,4 +383,25 @@ function setupAsk() {
 
     // Initialiser le drag-to-resize
     setupAskResize();
+
+    // --- Event delegation sur le body ASK (CSP-safe) ---
+    // Les boutons et tags sont générés dynamiquement dans displayAnswer()
+    document.getElementById('askBody').addEventListener('click', (e) => {
+        // Entités cliquables → focus dans le graphe
+        const entityTag = e.target.closest('[data-action="focus-node"]');
+        if (entityTag) {
+            focusNode(entityTag.dataset.nodeId);
+            return;
+        }
+        // Bouton Isoler
+        if (e.target.closest('[data-action="isolate-from-ask"]')) {
+            isolateFromAsk();
+            return;
+        }
+        // Bouton Export HTML
+        if (e.target.closest('[data-action="export-answer-html"]')) {
+            exportAnswerHtml();
+            return;
+        }
+    });
 }

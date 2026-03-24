@@ -27,7 +27,10 @@ def check_memory_access(memory_id: str) -> Optional[dict]:
     """
     Vérifie si le contexte d'auth actuel autorise l'accès à une mémoire.
     
+    Sécurité v2.1.0 : valide aussi le format de memory_id (anti injection).
+    
     Règles :
+    - Format memory_id invalide → refusé (ValueError)
     - Pas d'auth (localhost, public) → autorisé
     - Auth avec memory_ids vide → accès à toutes les mémoires
     - Auth avec memory_ids renseigné → accès restreint
@@ -39,6 +42,14 @@ def check_memory_access(memory_id: str) -> Optional[dict]:
     Returns:
         None si autorisé, dict d'erreur si refusé
     """
+    # Sécurité v2.1.0 : valider le format de memory_id avant tout accès
+    # Empêche les injections Cypher/S3/Qdrant via memory_id malveillant
+    try:
+        from ..core.validators import validate_memory_id
+        validate_memory_id(memory_id)
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+    
     auth = current_auth.get()
     
     # Pas d'auth = accès libre (localhost, endpoints publics)

@@ -50,7 +50,14 @@
 	# Headers de Sécurité (appliqués à TOUTES les routes)
 	# =========================================================================
 	header {
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'"
+		# Sécurité v2.1.0 : ajout HSTS (anti SSL-stripping)
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# CSP v2.1.0 : unsafe-inline supprimé de script-src (M6 corrigé)
+		# - script-src : SANS unsafe-inline (handlers onclick→event delegation)
+		# - style-src : AVEC unsafe-inline (requis par vis-network qui utilise
+		#   setAttribute('style',...) pour le rendu du graphe — lib tierce non modifiable)
+		# - connect-src : self + CDN (sourcemaps dev)
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://unpkg.com https://cdn.jsdelivr.net; font-src 'self'; frame-ancestors 'none'"
 		X-Frame-Options "DENY"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -107,6 +114,14 @@
 	# L'authentification est gérée par le serveur MCP (token Bearer).
 	# =========================================================================
 	handle /mcp* {
+		# Sécurité v2.1.0 : headers de sécurité aussi sur /mcp (M3)
+		header {
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "DENY"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			-Server
+			-X-Powered-By
+		}
 		reverse_proxy mcp-memory:8002 {
 			flush_interval -1
 			transport http {

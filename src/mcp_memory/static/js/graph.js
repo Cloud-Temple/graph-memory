@@ -183,8 +183,8 @@ function showNodeDetails(node) {
     });
 
     let html = `<h4>${node.label}</h4>
-        <span class="type-badge" style="background:${color}">${node.type}</span>
-        ${node.mentions > 1 ? `<span style="font-size:0.7rem;color:#4CAF50;margin-left:0.3rem">×${node.mentions}</span>` : ''}`;
+        <span class="type-badge" data-color="${color}">${node.type}</span>
+        ${node.mentions > 1 ? `<span class="type-badge-mentions">×${node.mentions}</span>` : ''}`;
 
     if (node.description) {
         const descriptions = node.description.split(' | ');
@@ -200,15 +200,26 @@ function showNodeDetails(node) {
         connectedEdges.slice(0, 15).forEach(e => {
             const other = e.from === node.id ? e.to : e.from;
             const dir = e.from === node.id ? '→' : '←';
-            html += `<div class="relation-item" style="cursor:pointer" onclick="focusNode('${other}')">
+            html += `<div class="relation-item relation-item-link" data-action="focus-node" data-node-id="${other}">
                 <span class="relation-type">${(e.type || 'RELATED').replace(/_/g, ' ')}</span>
                 <span>${dir} ${other.length > 28 ? other.substring(0, 26) + '…' : other}</span></div>`;
         });
-        if (connectedEdges.length > 15) html += `<p style="font-size:0.7rem;color:#888">… +${connectedEdges.length - 15}</p>`;
+        if (connectedEdges.length > 15) html += `<p class="detail-overflow">… +${connectedEdges.length - 15}</p>`;
         html += `</div>`;
     }
 
     content.innerHTML = html;
+
+    // Appliquer les couleurs dynamiques (CSP-safe : API DOM, pas inline style)
+    applyDynamicColors(content);
+
+    // Event delegation pour les relations cliquables
+    // (réattaché à chaque affichage car le contenu est remplacé)
+    content.onclick = function(e) {
+        const item = e.target.closest('[data-action="focus-node"]');
+        if (item) focusNode(item.dataset.nodeId);
+    };
+
     details.classList.add('visible');
 }
 
@@ -298,7 +309,7 @@ function isolateSubgraph(entityNames) {
     // 4. S'assurer que MENTIONS est visible pour connecter docs ↔ entités
     filterState.visibleEdgeTypes.add('MENTIONS');
     // Mettre à jour la checkbox MENTIONS dans la sidebar si elle existe
-    const mentionsCb = document.querySelector('#body-edgeTypes input[onchange*="MENTIONS"]');
+    const mentionsCb = document.querySelector('#body-edgeTypes input[data-type="MENTIONS"]');
     if (mentionsCb) mentionsCb.checked = true;
     const mentionsLabel = document.getElementById('label-etype-edge-MENTIONS');
     if (mentionsLabel) mentionsLabel.classList.remove('dimmed');

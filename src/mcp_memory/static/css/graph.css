@@ -583,3 +583,21 @@ button:disabled { background: #555; cursor: not-allowed; }
 }
 .layout-select:hover { border-color: #41a890; }
 .layout-select option { background: #1a1a2e; color: #eee; }
+
+/* ═══════════════ CSP-COMPLIANT UTILITY CLASSES ═══════════════ */
+/* Remplacent les attributs style="" inline (supprimés pour CSP strict) */
+
+.hidden { display: none; }
+.btn-fit { background: #2ecc71 !important; }
+.btn-ask-header { background: #e67e22 !important; }
+.entity-list-count { color: #888; font-size: 0.75rem; }
+.ask-placeholder { color: #888; font-size: 0.85rem; }
+.text-error { color: #e74c3c; }
+.ask-spinner-sm { width: 30px; height: 30px; border-width: 3px; margin: 0 auto 0.5rem; }
+.ask-entities-label { font-size: 0.72rem; color: #888; margin-right: 0.3rem; }
+.ask-sources-label { font-size: 0.72rem; color: #888; margin-bottom: 0.3rem; }
+.type-badge-mentions { font-size: 0.7rem; color: #4CAF50; margin-left: 0.3rem; }
+.relation-item-link { cursor: pointer; }
+.detail-overflow { font-size: 0.7rem; color: #888; }
+.entity-overflow { font-size: 0.7rem; color: #555; padding: 0.3rem; text-align: center; }
+.filter-color-doc { background: #e74c3c; }

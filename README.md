@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.6.1).
 
-**Dernière version** : v2.0.1 (17 mars 2026) — CLI v2.0 alignée Live Memory (whoami, token update, --json universel, memory update), 30 outils MCP, recette complète 136 tests.
+**Dernière version** : v2.1.0 (24 mars 2026) — Audit de sécurité complet : 19/23 vulnérabilités corrigées (dont 4 critiques), CSP strict (`unsafe-inline` supprimé de `script-src`), validation centralisée (`validators.py`), HSTS, Dependabot. 30 outils MCP, recette 136 tests.
 
 ---
 
@@ -888,4 +888,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v2.0.1 — Mars 2026*
+*Graph Memory v2.1.0 — Mars 2026*

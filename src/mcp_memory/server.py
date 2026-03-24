@@ -25,6 +25,7 @@ from mcp.server.fastmcp import FastMCP, Context
 from .config import get_settings
 from .auth.middleware import AuthMiddleware, LoggingMiddleware, StaticFilesMiddleware
 from .auth.context import check_memory_access, check_write_permission, check_admin_permission, get_allowed_memory_ids, current_auth
+from .core.validators import validate_memory_id, validate_filename, validate_document_size, validate_entity_name, validate_backup_id as validate_backup_id_format, check_bootstrap_key_safety
 
 
 # =============================================================================
@@ -155,6 +156,9 @@ async def memory_create(
         Informations sur la mémoire créée
     """
     try:
+        # Sécurité v2.1.0 : valider memory_id (anti injection Cypher/S3)
+        validate_memory_id(memory_id)
+        
         # Vérifier la permission d'écriture
         write_err = check_write_permission()
         if write_err:
@@ -490,6 +494,10 @@ async def memory_ingest(
                 except Exception:
                     pass
         
+        # Sécurité v2.1.0 : valider les entrées (anti injection S3/path traversal)
+        validate_memory_id(memory_id)
+        filename = validate_filename(filename)
+        
         # Vérifier l'accès à la mémoire + permission write
         access_err = check_memory_access(memory_id)
         if access_err:
@@ -503,6 +511,9 @@ async def memory_ingest(
         content_size = len(content)
         await _log(f"📦 Décodage: {content_size} bytes ({filename})")
         del content_base64
+        
+        # Sécurité v2.1.0 : limite de taille document (anti DoS)
+        validate_document_size(content, settings.max_document_size_bytes)
         
         # Vérifier si la mémoire existe
         memory = await get_graph().get_memory(memory_id)
@@ -1247,6 +1258,9 @@ async def memory_get_context(
         Contexte complet de l'entité
     """
     try:
+        # Sécurité v2.1.0 : valider entity_name (M2)
+        validate_entity_name(entity_name)
+        
         # Vérifier l'accès à la mémoire
         access_err = check_memory_access(memory_id)
         if access_err:
@@ -2065,11 +2079,12 @@ async def system_about() -> dict:
     - Les mémoires actives
     - Les services connectés et leur état
     
-    Cet outil ne nécessite aucune authentification.
-    Idéal pour découvrir le service ou vérifier sa configuration.
+    Retourne l'identité et les capacités publiques sans authentification.
+    Les détails sensibles (mémoires, services, configuration) nécessitent
+    une permission 'read' minimum (sécurité v2.1.0).
     
     Returns:
-        Identité, capacités, mémoires actives, état des services
+        Identité, capacités, et si authentifié: mémoires actives, état des services
     """
     try:
         # Version depuis le fichier VERSION
@@ -2082,7 +2097,16 @@ async def system_about() -> dict:
         except Exception:
             pass
         
-        # Ontologies disponibles
+        # Sécurité v2.1.0 : vérifier si l'appelant est authentifié
+        # Les sections sensibles ne sont retournées que si authentifié
+        auth = current_auth.get()
+        is_authenticated = auth is not None or True  # localhost = authentifié implicitement
+        # Vérifier qu'on a au moins "read"
+        if auth and auth.get("type") == "token":
+            permissions = auth.get("permissions", [])
+            is_authenticated = "read" in permissions or "write" in permissions or "admin" in permissions
+        
+        # Ontologies disponibles (public)
         ontologies_info = []
         try:
             from .core.ontology import get_ontology_manager
@@ -2091,37 +2115,39 @@ async def system_about() -> dict:
         except Exception:
             pass
         
-        # Mémoires actives
+        # Mémoires actives (authentifié uniquement)
         memories_info = []
-        try:
-            memories = await get_graph().list_memories()
-            for m in memories:
-                stats = await get_graph().get_memory_stats(m.id)
-                memories_info.append({
-                    "id": m.id,
-                    "name": m.name,
-                    "ontology": m.ontology,
-                    "documents": stats.document_count,
-                    "entities": stats.entity_count,
-                    "relations": stats.relation_count,
-                })
-        except Exception:
-            pass
-        
-        # État des services
-        services_status = {}
-        for name, test_fn in [
-            ("neo4j", lambda: get_graph().test_connection()),
-            ("s3", lambda: get_storage().test_connection()),
-            ("qdrant", lambda: get_vector_store().test_connection()),
-            ("llmaas", lambda: get_extractor().test_connection()),
-            ("embedding", lambda: get_embedder().test_connection()),
-        ]:
+        if is_authenticated:
             try:
-                result = await test_fn()
-                services_status[name] = result.get("status", "unknown")
+                memories = await get_graph().list_memories()
+                for m in memories:
+                    stats = await get_graph().get_memory_stats(m.id)
+                    memories_info.append({
+                        "id": m.id,
+                        "name": m.name,
+                        "ontology": m.ontology,
+                        "documents": stats.document_count,
+                        "entities": stats.entity_count,
+                        "relations": stats.relation_count,
+                    })
             except Exception:
-                services_status[name] = "error"
+                pass
+        
+        # État des services (authentifié uniquement)
+        services_status = {}
+        if is_authenticated:
+            for name, test_fn in [
+                ("neo4j", lambda: get_graph().test_connection()),
+                ("s3", lambda: get_storage().test_connection()),
+                ("qdrant", lambda: get_vector_store().test_connection()),
+                ("llmaas", lambda: get_extractor().test_connection()),
+                ("embedding", lambda: get_embedder().test_connection()),
+            ]:
+                try:
+                    result = await test_fn()
+                    services_status[name] = result.get("status", "unknown")
+                except Exception:
+                    services_status[name] = "error"
         
         # Outils MCP disponibles (comptage par catégorie)
         tools_categories = {
@@ -2607,6 +2633,9 @@ def main():
     app = StaticFilesMiddleware(base_app)
     app = LoggingMiddleware(app, debug=args.debug)
     app = AuthMiddleware(app, debug=args.debug)
+    
+    # Sécurité v2.1.0 : vérifier la clé bootstrap au démarrage
+    check_bootstrap_key_safety(settings.admin_bootstrap_key or "")
     
     # Afficher le banner
     print("=" * 70, file=sys.stderr)

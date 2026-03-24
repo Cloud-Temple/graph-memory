@@ -5,7 +5,8 @@
 # Run     : docker run -p 8002:8002 --env-file .env mcp-memory
 # =============================================================================
 
-FROM python:3.11-slim
+# Sécurité v2.1.0 : version épinglée (I2)
+FROM python:3.11.12-slim
 
 # Métadonnées
 LABEL maintainer="Cloud Temple"

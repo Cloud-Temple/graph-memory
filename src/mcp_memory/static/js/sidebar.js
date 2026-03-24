@@ -7,7 +7,26 @@
  *   3. Documents (checkboxes par document)
  *
  * Chaque changement de filtre appelle applyFilters() (défini dans config.js).
+ *
+ * CSP-compliant : aucun inline handler (onclick/onchange) ni inline style.
+ * Les couleurs dynamiques sont appliquées via element.style après innerHTML.
+ * Les événements utilisent la délégation (listeners sur les conteneurs parents).
  */
+
+// ═══════════════ COULEURS DYNAMIQUES (CSP-safe) ═══════════════
+
+/**
+ * Applique les couleurs stockées dans data-color sur les éléments d'un conteneur.
+ * Utilise element.style.xxx (API DOM, autorisé par CSP) au lieu de style="".
+ */
+function applyDynamicColors(container) {
+    container.querySelectorAll('[data-color]').forEach(el => {
+        el.style.background = el.dataset.color;
+    });
+    container.querySelectorAll('[data-border-color]').forEach(el => {
+        el.style.borderLeftColor = el.dataset.borderColor;
+    });
+}
 
 // ═══════════════ STATS ═══════════════
 
@@ -61,12 +80,15 @@ function buildEntityTypeFilters(nodes) {
         return `
             <label class="filter-item" title="${type} (${typeCounts[type]})">
                 <input type="checkbox" ${checked}
-                       onchange="toggleEntityType('${type}', this.checked)">
-                <div class="filter-color" style="background:${color}"></div>
+                       data-action="toggle-entity-type" data-type="${type}">
+                <div class="filter-color" data-color="${color}"></div>
                 <span class="filter-label ${dimmed}" id="label-etype-${type}">${type}</span>
                 <span class="filter-count">${typeCounts[type]}</span>
             </label>`;
     }).join('');
+
+    // Appliquer les couleurs dynamiques (CSP-safe)
+    applyDynamicColors(body);
 }
 
 /** Toggle un type d'entité */
@@ -155,12 +177,15 @@ function buildEdgeTypeFilters(edges) {
         return `
             <label class="filter-item" title="${displayName} (${typeCounts[type]})">
                 <input type="checkbox" ${checked}
-                       onchange="toggleEdgeType('${type}', this.checked)">
-                <div class="filter-edge-color" style="background:${color}"></div>
+                       data-action="toggle-edge-type" data-type="${type}">
+                <div class="filter-edge-color" data-color="${color}"></div>
                 <span class="filter-label ${dimmed}" id="label-etype-edge-${type}">${displayName}</span>
                 <span class="filter-count">${typeCounts[type]}</span>
             </label>`;
     }).join('');
+
+    // Appliquer les couleurs dynamiques (CSP-safe)
+    applyDynamicColors(body);
 }
 
 /** Toggle un type de relation */
@@ -241,8 +266,8 @@ function buildDocumentFilters(documents) {
         return `
             <label class="filter-item" title="${name}">
                 <input type="checkbox" ${checked}
-                       onchange="toggleDocument('${doc.id}', this.checked)">
-                <div class="filter-color" style="background:#e74c3c"></div>
+                       data-action="toggle-document" data-doc-id="${doc.id}">
+                <div class="filter-color filter-color-doc"></div>
                 <span class="filter-label ${dimmed}" id="label-doc-${doc.id}">${shortName}</span>
             </label>`;
     }).join('');
@@ -295,16 +320,22 @@ function updateEntityList(nodes) {
 
     if (countSpan) countSpan.textContent = `(${sorted.length})`;
 
-    list.innerHTML = sorted.slice(0, 80).map(n => `
-        <div class="entity-item" onclick="focusNode('${n.id}')"
-             style="border-left:3px solid ${TYPE_COLORS[n.type] || TYPE_COLORS.Unknown}">
+    list.innerHTML = sorted.slice(0, 80).map(n => {
+        const color = TYPE_COLORS[n.type] || TYPE_COLORS.Unknown;
+        return `
+        <div class="entity-item" data-action="focus-node" data-node-id="${n.id}"
+             data-border-color="${color}">
             ${n.label.substring(0, 35)}${n.label.length > 35 ? '…' : ''}
             <div class="type">${n.type}</div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 
     if (sorted.length > 80) {
-        list.innerHTML += `<div style="font-size:0.7rem;color:#555;padding:0.3rem;text-align:center">… +${sorted.length - 80} entités</div>`;
+        list.innerHTML += `<div class="entity-overflow">… +${sorted.length - 80} entités</div>`;
     }
+
+    // Appliquer les couleurs dynamiques (border-left)
+    applyDynamicColors(list);
 }
 
 // ═══════════════ RECHERCHE LOCALE ═══════════════
@@ -342,6 +373,63 @@ function setupSearchFilter() {
             }
         }
     });
+}
+
+// ═══════════════ EVENT DELEGATION (CSP-safe) ═══════════════
+
+/**
+ * Initialise la délégation d'événements sur la sidebar.
+ * Un seul listener par conteneur parent, dispatche via data-action.
+ * Appelé une fois au démarrage (DOMContentLoaded).
+ */
+function setupSidebarEvents() {
+    // --- Filter headers (toggle collapse) ---
+    document.querySelectorAll('[data-action="toggle-section"]').forEach(el => {
+        el.addEventListener('click', () => toggleFilterSection(el.dataset.section));
+    });
+
+    // --- Filter action buttons ---
+    const actionMap = {
+        'select-all-entity-types': selectAllEntityTypes,
+        'select-no-entity-types': selectNoEntityTypes,
+        'invert-entity-types': invertEntityTypes,
+        'select-all-edge-types': selectAllEdgeTypes,
+        'select-no-edge-types': selectNoEdgeTypes,
+        'invert-edge-types': invertEdgeTypes,
+        'select-all-documents': selectAllDocuments,
+        'select-no-documents': selectNoDocuments
+    };
+    Object.entries(actionMap).forEach(([action, fn]) => {
+        const btn = document.querySelector(`[data-action="${action}"]`);
+        if (btn) btn.addEventListener('click', fn);
+    });
+
+    // --- Entity type checkboxes (event delegation) ---
+    document.getElementById('body-entityTypes').addEventListener('change', (e) => {
+        const input = e.target.closest('[data-action="toggle-entity-type"]');
+        if (input) toggleEntityType(input.dataset.type, input.checked);
+    });
+
+    // --- Edge type checkboxes (event delegation) ---
+    document.getElementById('body-edgeTypes').addEventListener('change', (e) => {
+        const input = e.target.closest('[data-action="toggle-edge-type"]');
+        if (input) toggleEdgeType(input.dataset.type, input.checked);
+    });
+
+    // --- Document checkboxes (event delegation) ---
+    document.getElementById('body-documents').addEventListener('change', (e) => {
+        const input = e.target.closest('[data-action="toggle-document"]');
+        if (input) toggleDocument(input.dataset.docId, input.checked);
+    });
+
+    // --- Entity list clicks (event delegation) ---
+    document.getElementById('entityList').addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action="focus-node"]');
+        if (item) focusNode(item.dataset.nodeId);
+    });
+
+    // --- Node details close button ---
+    document.getElementById('nodeDetailsClose').addEventListener('click', hideNodeDetails);
 }
 
 // ═══════════════ CONSTRUCTION COMPLÈTE DES FILTRES ═══════════════

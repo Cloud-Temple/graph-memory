@@ -16,7 +16,7 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v2.0.0).
 
-**Latest**: v2.0.1 (March 17, 2026) — CLI v2.0 aligned with Live Memory syntax (whoami, token update, --json everywhere, memory update), 30 MCP tools, 136-test acceptance suite.
+**Latest**: v2.1.0 (March 24, 2026) — Full security audit: 19/23 vulnerabilities fixed (including 4 critical), strict CSP (`unsafe-inline` removed from `script-src`), centralized validation (`validators.py`), HSTS, Dependabot. 30 MCP tools, 136-test acceptance suite.
 
 ---
 

@@ -5,6 +5,7 @@ AuthMiddleware - Middleware ASGI pour l'authentification Bearer Token.
 Vérifie le header Authorization et valide le token via TokenManager.
 """
 
+import hmac
 import os
 import sys
 from typing import Optional
@@ -63,11 +64,13 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
         
-        # Requêtes internes (localhost) : pas d'auth pour MCP/SSE
+        # Requêtes internes (localhost) : pas d'auth pour MCP Streamable HTTP
         # MAIS les endpoints /api/ exigent toujours un token (pour le client web)
+        # Sécurité v2.1.0 : bypass désactivable via LOCALHOST_AUTH_BYPASS=false
+        localhost_bypass = os.getenv("LOCALHOST_AUTH_BYPASS", "true").lower() == "true"
         client = scope.get("client", ("", 0))
         client_ip = client[0] if client else ""
-        if client_ip in ("127.0.0.1", "::1") and not path.startswith("/api/"):
+        if localhost_bypass and client_ip in ("127.0.0.1", "::1") and not path.startswith("/api/"):
             await self.app(scope, receive, send)
             return
         
@@ -91,8 +94,9 @@ class AuthMiddleware:
         token = auth_header[7:]  # Retire "Bearer "
         
         # Vérifier si c'est la clé bootstrap admin
+        # Sécurité v2.1.0 : comparaison constant-time (anti timing attack)
         bootstrap_key = self._settings.admin_bootstrap_key
-        if bootstrap_key and token == bootstrap_key:
+        if bootstrap_key and hmac.compare_digest(token, bootstrap_key):
             if self.debug:
                 print(f"✅ [Auth] Authentification avec clé bootstrap admin", file=sys.stderr)
             # Ajouter info d'auth au scope
@@ -177,7 +181,15 @@ class LoggingMiddleware:
         query = scope.get("query_string", b"").decode()
         
         full_path = f"{path}?{query}" if query else path
-        print(f"📥 [HTTP] {method} {full_path}", file=sys.stderr)
+        
+        # Sécurité v2.1.0 : masquer les headers sensibles dans les logs (M7)
+        headers = dict(scope.get("headers", []))
+        auth_h = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
+        if auth_h:
+            masked = f"Bearer ***...{auth_h[-4:]}" if len(auth_h) > 12 else "***"
+            print(f"📥 [HTTP] {method} {full_path} [Auth: {masked}]", file=sys.stderr)
+        else:
+            print(f"📥 [HTTP] {method} {full_path}", file=sys.stderr)
         
         # Wrapper pour logger la réponse
         status_code = [None]

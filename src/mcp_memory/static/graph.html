@@ -37,8 +37,8 @@
         <select id="memorySelect"><option value="">-- Mémoire --</option></select>
         <button id="loadBtn" disabled>Charger</button>
         <button class="btn-settings" id="settingsBtn">⚙️</button>
-        <button class="btn-settings" id="fitBtn" style="background:#2ecc71!important">🔍 Fit</button>
-        <button class="btn-settings" id="askBtn" disabled style="background:#e67e22!important">💬 Ask</button>
+        <button class="btn-settings btn-fit" id="fitBtn">🔍 Fit</button>
+        <button class="btn-settings btn-ask-header" id="askBtn" disabled>💬 Ask</button>
         <span class="header-separator">|</span>
         <select id="layoutSelect" class="layout-select" title="Forme du graphe">
             <option value="barnesHut">🌿 Organique</option>
@@ -87,14 +87,14 @@
 
         <!-- ═══ FILTRE : Types d'entités ═══ -->
         <div class="filter-section">
-            <div class="filter-header" onclick="toggleFilterSection('entityTypes')">
+            <div class="filter-header" data-action="toggle-section" data-section="entityTypes">
                 <span>🏷️ Types d'entités</span>
                 <span class="filter-chevron" id="chevron-entityTypes">▼</span>
             </div>
             <div class="filter-actions" id="actions-entityTypes">
-                <button onclick="selectAllEntityTypes()" title="Tout afficher">Tous</button>
-                <button onclick="selectNoEntityTypes()" title="Tout masquer">Aucun</button>
-                <button onclick="invertEntityTypes()" title="Inverser">Inverser</button>
+                <button data-action="select-all-entity-types" title="Tout afficher">Tous</button>
+                <button data-action="select-no-entity-types" title="Tout masquer">Aucun</button>
+                <button data-action="invert-entity-types" title="Inverser">Inverser</button>
             </div>
             <div class="filter-body" id="body-entityTypes">
                 <!-- Checkboxes générées dynamiquement par sidebar.js -->
@@ -104,14 +104,14 @@
 
         <!-- ═══ FILTRE : Types de relations ═══ -->
         <div class="filter-section">
-            <div class="filter-header" onclick="toggleFilterSection('edgeTypes')">
+            <div class="filter-header" data-action="toggle-section" data-section="edgeTypes">
                 <span>🔗 Types de relations</span>
                 <span class="filter-chevron" id="chevron-edgeTypes">▼</span>
             </div>
             <div class="filter-actions" id="actions-edgeTypes">
-                <button onclick="selectAllEdgeTypes()">Tous</button>
-                <button onclick="selectNoEdgeTypes()">Aucun</button>
-                <button onclick="invertEdgeTypes()">Inverser</button>
+                <button data-action="select-all-edge-types" title="Tous">Tous</button>
+                <button data-action="select-no-edge-types" title="Aucun">Aucun</button>
+                <button data-action="invert-edge-types" title="Inverser">Inverser</button>
             </div>
             <div class="filter-body" id="body-edgeTypes">
                 <div class="filter-empty">Chargez une mémoire…</div>
@@ -120,13 +120,13 @@
 
         <!-- ═══ FILTRE : Documents ═══ -->
         <div class="filter-section">
-            <div class="filter-header" onclick="toggleFilterSection('documents')">
+            <div class="filter-header" data-action="toggle-section" data-section="documents">
                 <span>📄 Documents</span>
                 <span class="filter-chevron" id="chevron-documents">▼</span>
             </div>
             <div class="filter-actions" id="actions-documents">
-                <button onclick="selectAllDocuments()">Tous</button>
-                <button onclick="selectNoDocuments()">Aucun</button>
+                <button data-action="select-all-documents" title="Tous">Tous</button>
+                <button data-action="select-no-documents" title="Aucun">Aucun</button>
             </div>
             <div class="filter-body" id="body-documents">
                 <div class="filter-empty">Chargez une mémoire…</div>
@@ -138,7 +138,7 @@
         <input type="text" id="searchInput" placeholder="Rechercher une entité…">
 
         <!-- Liste d'entités -->
-        <h3>📋 Entités <span id="entityListCount" style="color:#888;font-size:0.75rem"></span></h3>
+        <h3>📋 Entités <span id="entityListCount" class="entity-list-count"></span></h3>
         <div class="entity-list" id="entityList"></div>
 
     </div>
@@ -146,9 +146,9 @@
     <!-- ═══════════════ ZONE GRAPHE ═══════════════ -->
     <div class="graph-container">
         <div id="graph"></div>
-        <div class="loading" id="loading" style="display:none"><div class="spinner"></div><p>Chargement…</p></div>
+        <div class="loading hidden" id="loading"><div class="spinner"></div><p>Chargement…</p></div>
         <div class="node-details" id="nodeDetails">
-            <button class="node-details-close" onclick="hideNodeDetails()">✕</button>
+            <button class="node-details-close" id="nodeDetailsClose">✕</button>
             <div id="detailContent"></div>
         </div>
 
@@ -162,7 +162,7 @@
                 <button class="ask-close" id="askCloseBtn">✕</button>
             </div>
             <div class="ask-body" id="askBody">
-                <p style="color:#888;font-size:0.85rem">Posez une question en langage naturel. Les entités trouvées seront mises en évidence dans le graphe.</p>
+                <p class="ask-placeholder">Posez une question en langage naturel. Les entités trouvées seront mises en évidence dans le graphe.</p>
             </div>
         </div>
     </div>

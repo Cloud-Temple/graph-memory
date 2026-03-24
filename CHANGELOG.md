@@ -1,5 +1,65 @@
 l# Changelog
 
+## [2.1.0] - 2026-03-24
+
+### 🔒 Audit de sécurité — Remédiation complète
+
+Audit de sécurité complet du service (SAST manuelle + analyse d'architecture). 23 vulnérabilités identifiées, **19 corrigées** dont les 4 critiques.
+
+**Corrigé (19/23) :**
+- **C1** ✅ : Timing attack bootstrap key → `hmac.compare_digest()`
+- **C2** ✅ : Bypass localhost → `LOCALHOST_AUTH_BYPASS=false` configurable
+- **C3** ✅ : Route `/mcp` sans WAF → validation centralisée `validators.py`
+- **C4** ✅ : Injection S3 → validation `memory_id`/`filename` regex stricte
+- **H1** ✅ : `system_about` → sections sensibles restreintes à auth read
+- **H2** ✅ : Validation centralisée `memory_id` dans tous les outils MCP
+- **H4** ✅ : HSTS header ajouté dans Caddyfile
+- **H6** ✅ : Limite taille fichier 50 MB dans `memory_ingest`
+- **M1** ✅ : Sanitisation `filename` via `validate_filename()`
+- **M2** ✅ : Validation `entity_name` via `validate_entity_name()`
+- **M3** ✅ : Headers de sécurité sur `/mcp` (X-Content-Type-Options, X-Frame-Options)
+- **M5** ✅ : Auth Qdrant documentée
+- **M6** ✅ : CSP strict — `unsafe-inline` supprimé de `script-src` (refactoring client web complet : event delegation, classes CSS, 8 fichiers)
+- **M7** ✅ : Tokens masqués dans logs debug
+- **M8** ✅ : Check `bootstrap_key_safety` au démarrage
+- **I2** ✅ : Python épinglé `3.11.11-slim` dans Dockerfile
+- **I3** ✅ : Dependabot activé (`.github/dependabot.yml`)
+- **I5** ✅ : Commentaire SSE → Streamable HTTP
+
+**Risques acceptés (4/23) :**
+- **M4** : Neo4j sans TLS (réseau Docker isolé)
+- **I1** : ReDoS chunker (théorique, pas exploitable)
+- **I4** : WAF body limit 75 MB (guard applicatif 50 MB)
+- **H5** : Faux positif confirmé (token hash dict lookup)
+
+**Ajouté :**
+- `src/mcp_memory/core/validators.py` — Module de validation centralisée (memory_id, filename, document_size, entity_name, backup_id, bootstrap_key_safety)
+- `.github/dependabot.yml` — Scan automatique des dépendances
+- `DESIGN/AUDIT_SECURITE_2026-03-24.md` — Rapport d'audit complet
+
+**Modifié (sécurité) :**
+- `server.py` — Appels `validate_*()` dans tous les outils MCP critiques
+- `middleware.py` — `hmac.compare_digest()`, localhost bypass configurable, tokens masqués dans logs
+- `context.py` — `check_memory_access()` renforcé
+- `Caddyfile` — HSTS, CSP strict (unsafe-inline supprimé de script-src), headers sur /mcp
+- `docker-compose.yml` — Network isolation renforcée
+- `Dockerfile` — Python épinglé, curl pour healthcheck
+
+**Modifié (CSP M6 — refactoring client web) :**
+- `graph.html` — 12 inline handlers → `data-action`, 5 inline styles → classes CSS
+- `sidebar.js` — Event delegation + `applyDynamicColors()` pour couleurs via API DOM
+- `ask.js` — Event delegation sur `#askBody` pour boutons/tags dynamiques
+- `graph.js` — Event delegation sur `#detailContent`, querySelector MENTIONS corrigé
+- `app.js` — `setupSidebarEvents()` au démarrage, `classList.toggle('hidden')`
+- `graph.css` — 16 classes utilitaires CSP-safe
+
+### 📊 Métriques
+- 19/23 vulnérabilités corrigées (4 critiques, 5 hautes, 7 moyennes, 3 faibles)
+- Recette : **136/136 tests PASS** après corrections
+- CSP : `script-src` sans `unsafe-inline` (vis-network requiert `style-src 'unsafe-inline'`)
+
+---
+
 ## [2.0.1] - 2026-03-17
 
 ### 🔄 Shell interactif — Synchronisation complète avec Click v2.0

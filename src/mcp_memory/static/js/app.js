@@ -152,7 +152,7 @@ async function loadSelectedGraph() {
     if (!memoryId) return;
 
     const loading = document.getElementById('loading');
-    loading.style.display = 'block';
+    loading.classList.remove('hidden');
 
     try {
         const result = await apiLoadGraph(memoryId);
@@ -183,7 +183,7 @@ async function loadSelectedGraph() {
             alert('Erreur: ' + e.message);
         }
     } finally {
-        loading.style.display = 'none';
+        loading.classList.add('hidden');
     }
 }
 
@@ -279,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupHeaderControls();
     setupSettingsModal();
     setupSearchFilter();
+    setupSidebarEvents();  // Event delegation CSP-safe (sidebar + filtres)
     setupAsk();
 
     // Vérifier le token existant (ou afficher le login)
