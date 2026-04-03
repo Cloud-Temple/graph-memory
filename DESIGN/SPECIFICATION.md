@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 2.0.1 | **Date** : 17 mars 2026
+> **Version** : 2.1.1 | **Date** : 3 avril 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 
@@ -350,7 +350,7 @@ Chaque mémoire a sa propre collection Qdrant :
 | ----------------- | ------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------- |
 | `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `metadata?`, `force?`, `source_path?`, `source_modified_at?` | 🔑 write | Ingère un document : S3 + LLM extraction + Neo4j + Qdrant      |
 | `document_list`   | `memory_id`                                                                                             | 🔑 read  | Liste les documents avec métadonnées                           |
-| `document_get`    | `memory_id`, `filename`, `include_content?`                                                             | 🔑 read  | Métadonnées (+ contenu S3 si `include_content=true`)           |
+| `document_get`    | `memory_id`, `document_id`, `include_content?`, `content_format?`                                       | 🔑 read  | Métadonnées (+ contenu si `include_content=true`). `content_format="text"` (défaut) = texte extrait, `"raw"` = base64 original |
 | `document_delete` | `memory_id`, `document_id`                                                                              | 🔑 write | Supprime doc + entités orphelines + chunks Qdrant + fichier S3 |
 
 ### 4.3 Recherche et Q&A (4 outils)
@@ -1271,5 +1271,5 @@ graph-memory/
 
 ---
 
-*Graph Memory v2.0.1 — Cahier de Spécification — 17 mars 2026*
+*Graph Memory v2.1.1 — Cahier de Spécification — 3 avril 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*

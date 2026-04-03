@@ -1671,7 +1671,8 @@ async def document_list(
 async def document_get(
     memory_id: Annotated[str, Field(description="ID de la mémoire")],
     document_id: Annotated[str, Field(description="ID du document (UUID)")],
-    include_content: Annotated[bool, Field(default=False, description="Si true, télécharge et inclut le contenu S3 (lent)")] = False
+    include_content: Annotated[bool, Field(default=False, description="Si true, télécharge et inclut le contenu S3 (lent)")] = False,
+    content_format: Annotated[str, Field(default="text", description="Format du contenu retourné pour les fichiers binaires : 'text' (texte extrait, défaut) ou 'raw' (base64 des bytes originaux pour forwarding)")] = "text"
 ) -> dict:
     """
     Récupère les métadonnées d'un document, et optionnellement son contenu.
@@ -1679,10 +1680,15 @@ async def document_get(
     Par défaut, retourne uniquement les métadonnées (rapide, pas de téléchargement S3).
     Passez include_content=True pour télécharger et inclure le contenu du document.
     
+    Pour les fichiers binaires (DOCX, PDF, XLSX...), deux modes :
+    - content_format="text" (défaut) : extrait le texte lisible (paragraphes, tableaux)
+    - content_format="raw" : retourne les bytes originaux en base64 (pour forwarding vers d'autres services)
+    
     Args:
         memory_id: ID de la mémoire
         document_id: ID du document
         include_content: Si True, télécharge et inclut le contenu S3 (lent). Défaut: False.
+        content_format: "text" (texte extrait, défaut) ou "raw" (base64 original). Défaut: "text".
         
     Returns:
         Métadonnées du document (et contenu si demandé)
@@ -1720,7 +1726,32 @@ async def document_get(
             try:
                 uri = doc_info["uri"]
                 content_bytes = await get_storage().download_document(memory_id, uri)
-                result["content"] = content_bytes.decode('utf-8', errors='ignore')
+
+                # Distinguer fichiers texte vs binaires
+                content_type = doc_info.get("content_type", "")
+                text_extensions = {"txt", "md", "csv", "html", "htm", "json", "xml", "yaml", "yml"}
+
+                if content_type in text_extensions:
+                    # Fichiers texte : décodage UTF-8 direct (content_format ignoré)
+                    result["content"] = content_bytes.decode('utf-8', errors='replace')
+                elif content_format == "raw":
+                    # Mode raw : bytes bruts en base64 (pour forwarding vers MCP Office etc.)
+                    result["content_base64"] = base64.b64encode(content_bytes).decode('ascii')
+                    result["content_format"] = "raw"
+                    result["content_note"] = f"Fichier binaire original ({content_type}) encodé en base64"
+                else:
+                    # Mode text (défaut) : extraction texte lisible
+                    filename = doc_info.get("filename", "document")
+                    extracted_text = _extract_text(content_bytes, filename)
+                    if extracted_text:
+                        result["content"] = extracted_text
+                        result["content_format"] = "text"
+                        result["content_note"] = f"Texte extrait du document binaire ({content_type}). Passez content_format='raw' pour le fichier original en base64."
+                    else:
+                        # Extraction impossible → fallback automatique vers raw
+                        result["content_base64"] = base64.b64encode(content_bytes).decode('ascii')
+                        result["content_format"] = "raw"
+                        result["content_note"] = f"Extraction texte non supportée pour {content_type}, fallback base64 automatique."
             except Exception as e:
                 result["content"] = f"[Erreur lecture S3: {e}]"
         
