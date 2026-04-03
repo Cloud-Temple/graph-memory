@@ -16,7 +16,7 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v2.0.0).
 
-**Latest**: v2.1.0 (March 24, 2026) — Full security audit: 19/23 vulnerabilities fixed (including 4 critical), strict CSP (`unsafe-inline` removed from `script-src`), centralized validation (`validators.py`), HSTS, Dependabot. 30 MCP tools, 136-test acceptance suite.
+**Latest**: v2.1.1 (April 3, 2026) — Fix `document_get` on binary files (DOCX, PDF) + new `content_format` parameter ("text"|"raw"). 30 MCP tools, 150-test acceptance suite.
 
 ---
 
@@ -58,7 +58,7 @@ Question (natural language)
 - **Complete CLI** — Click (scriptable) + interactive shell with autocompletion
 - **Backup/Restore** — full 3-layer backup (Neo4j + Qdrant + S3) with tar.gz archive support
 - **Multi-tenant** — namespace isolation per memory in Neo4j
-- **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.1), admin delegation, rate limiting, non-root container, isolated Docker network, **136 automated tests**
+- **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.1), admin delegation, rate limiting, non-root container, isolated Docker network, **150 automated tests**
 - **Formats** — PDF, DOCX, Markdown, TXT, HTML, CSV
 
 ---

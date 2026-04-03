@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.6.1).
 
-**Dernière version** : v2.1.0 (24 mars 2026) — Audit de sécurité complet : 19/23 vulnérabilités corrigées (dont 4 critiques), CSP strict (`unsafe-inline` supprimé de `script-src`), validation centralisée (`validators.py`), HSTS, Dependabot. 30 outils MCP, recette 136 tests.
+**Dernière version** : v2.1.1 (3 avril 2026) — Fix `document_get` sur fichiers binaires (DOCX, PDF) + nouveau paramètre `content_format` ("text"|"raw"). 30 outils MCP, recette 150 tests.
 
 ---
 
@@ -161,7 +161,7 @@ Question en langage naturel
 - **Isolation multi-tenant durcie** (v1.6.1) : chaque token ne voit/modifie que ses mémoires autorisées
 - Isolation des données par mémoire (namespace Neo4j)
 - **14 contrôles d'accès** sur les 30 outils MCP (access, write, admin)
-- **Recette automatisée** : 136 tests × 3 profils (admin, read/write, read-only)
+- **Recette automatisée** : 150 tests × 3 profils (admin, read/write, read-only)
 
 ---
 
@@ -735,7 +735,7 @@ graph-memory/
 │
 ├── scripts/                  # CLI et utilitaires
 │   ├── mcp_cli.py            # Point d'entrée CLI (Click + Shell)
-│   ├── test_recette.py       # Recette complète (136 tests, 7 phases, 3 profils)
+│   ├── test_recette.py       # Recette complète (150 tests, 7 phases, 3 profils)
 │   ├── tests/                # Modules de test modulaires (7 fichiers)
 │   ├── README.md             # Documentation CLI
 │   └── cli/                  # Package CLI
@@ -888,4 +888,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v2.1.0 — Mars 2026*
+*Graph Memory v2.1.1 — Avril 2026*

@@ -115,8 +115,20 @@ def assert_field(result: dict, field: str, test_name: str) -> bool:
 
 def make_test_doc(content: str = "Cloud Temple est un fournisseur cloud souverain français. "
                   "Il propose des services IaaS, PaaS et SaaS certifiés SecNumCloud.") -> str:
-    """Crée un document de test encodé en base64."""
+    """Crée un document de test texte encodé en base64."""
     return base64.b64encode(content.encode("utf-8")).decode("ascii")
+
+
+def make_test_docx(content: str = "Cloud Temple est un fournisseur cloud souverain français. "
+                   "Il propose des services IaaS, PaaS et SaaS certifiés SecNumCloud.") -> str:
+    """Crée un document DOCX de test encodé en base64 (fichier binaire)."""
+    from docx import Document as DocxDocument
+    from io import BytesIO
+    doc = DocxDocument()
+    doc.add_paragraph(content)
+    buf = BytesIO()
+    doc.save(buf)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def phase_header(num: int, title: str, emoji: str = "📋"):

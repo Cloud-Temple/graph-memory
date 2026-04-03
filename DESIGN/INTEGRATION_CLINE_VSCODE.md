@@ -1,6 +1,6 @@
 # Guide d'intégration — Graph Memory + Cline (VS Code)
 
-> **Version** : 2.0 | **Date** : 17 mars 2026
+> **Version** : 2.1 | **Date** : 3 avril 2026
 > **Audience** : Développeurs et utilisateurs de Cline dans VS Code
 > **Prérequis** : Graph Memory déployé (local ou distant), extension Cline installée
 
@@ -474,5 +474,5 @@ Cette interface permet de :
 
 ---
 
-*Guide d'intégration Graph Memory + Cline — v2.0 — Mars 2026*
+*Guide d'intégration Graph Memory + Cline — v2.1 — Avril 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*

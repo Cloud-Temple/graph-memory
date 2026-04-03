@@ -1,5 +1,32 @@
 l# Changelog
 
+## [2.1.1] - 2026-04-03
+
+### 🐛 Fix `document_get(include_content=True)` sur fichiers binaires
+
+**Bug** : `document_get` avec `include_content=True` crashait sur les fichiers binaires (DOCX, PDF, XLSX) avec `UnicodeEncodeError: 'latin-1' codec can't encode character '\u0317'`. Le code faisait `content_bytes.decode('utf-8', errors='ignore')` sur des bytes ZIP, produisant des caractères Unicode aberrants qui crashaient la sérialisation HTTP.
+
+**Fix** : Distinction fichiers texte vs binaires + nouveau paramètre `content_format` :
+
+- **Fichiers texte** (txt, md, csv, html, json, xml, yaml) → `decode('utf-8', errors='replace')` (au lieu de `errors='ignore'`)
+- **Fichiers binaires** avec `content_format="text"` (défaut) → extraction texte via python-docx/pypdf (réutilisation de `_extract_text()` existante). Retourne `content` = texte lisible + `content_note`
+- **Fichiers binaires** avec `content_format="raw"` → bytes bruts en base64 dans `content_base64` (pour forwarding vers MCP Office, etc.)
+- **Fallback automatique** : si extraction texte impossible en mode `text`, bascule automatique vers `raw` avec `content_note` explicatif
+
+**Nouveau paramètre MCP** : `content_format` (optionnel, défaut `"text"`) dans `document_get` — permet à l'agent de choisir entre texte extrait (lecture/recherche) et bytes bruts base64 (forwarding).
+
+**Tests** :
+- Helper `make_test_docx()` pour créer des DOCX de test en mémoire
+- 3 nouveaux groupes de tests (4.12 texte, 4.13/4.13b DOCX text+raw, 4.14 nettoyage)
+- Recette : **136 → 150 tests**, 150/150 PASS en 39.8s
+
+**Fichiers modifiés** :
+- `src/mcp_memory/server.py` — `document_get` refactorisé avec `content_format`
+- `scripts/tests/__init__.py` — ajout `make_test_docx()`
+- `scripts/tests/test_documents.py` — tests 4.12, 4.13, 4.13b, 4.14
+
+---
+
 ## [2.1.0] - 2026-03-24
 
 ### 🔒 Audit de sécurité — Remédiation complète
