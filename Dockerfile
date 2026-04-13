@@ -6,7 +6,7 @@
 # =============================================================================
 
 # Sécurité v2.1.0 : version épinglée (I2)
-FROM python:3.11.12-slim
+FROM python:3.14.0-slim
 
 # Métadonnées
 LABEL maintainer="Cloud Temple"
