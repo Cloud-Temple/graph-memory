@@ -29,7 +29,7 @@ openai>=1.0.0
 
 # === Configuration ===
 pydantic>=2.0.0
-pydantic-settings>=2.0.0
+pydantic-settings>=2.14.0
 python-dotenv>=1.0.0
 
 # === Utilitaires ===
