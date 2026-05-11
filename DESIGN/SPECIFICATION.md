@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 2.1.1 | **Date** : 3 avril 2026
+> **Version** : 2.1.2 | **Date** : 11 mai 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 
@@ -1271,5 +1271,5 @@ graph-memory/
 
 ---
 
-*Graph Memory v2.1.1 — Cahier de Spécification — 3 avril 2026*
+*Graph Memory v2.1.2 — Cahier de Spécification — 11 mai 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*

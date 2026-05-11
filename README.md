@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.6.1).
 
-**Dernière version** : v2.1.1 (3 avril 2026) — Fix `document_get` sur fichiers binaires (DOCX, PDF) + nouveau paramètre `content_format` ("text"|"raw"). 30 outils MCP, recette 150 tests.
+**Dernière version** : v2.1.2 (11 mai 2026) — Mises à jour de dépendances (boto3, pydantic-settings, python-multipart, rich). Aucun changement applicatif, recette toujours à 150/150 tests verts. 30 outils MCP.
 
 ---
 
@@ -888,4 +888,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v2.1.1 — Avril 2026*
+*Graph Memory v2.1.2 — Mai 2026*
