@@ -6,6 +6,13 @@ Service de mémoire persistante basé sur un **graphe de connaissances** pour le
 
 Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
+[![CI](https://github.com/Cloud-Temple/graph-memory/actions/workflows/build.yml/badge.svg)](https://github.com/Cloud-Temple/graph-memory/actions/workflows/build.yml)
+[![Docker](https://img.shields.io/badge/ghcr.io-cloud--temple%2Fgraph--memory-blue?logo=docker)](https://ghcr.io/cloud-temple/graph-memory)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)]()
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)]()
+[![MCP](https://img.shields.io/badge/protocol-MCP-purple.svg)]()
+[![Python](https://img.shields.io/badge/python-3.11+-yellow.svg)]()
+
 <p align="center">
   <img src="screenshoot/screen1.png" alt="Graph Memory — Visualisation du graphe de connaissances" width="800">
 </p>
