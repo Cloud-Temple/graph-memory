@@ -16,7 +16,7 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v2.0.0).
 
-**Latest**: v2.1.1 (April 3, 2026) — Fix `document_get` on binary files (DOCX, PDF) + new `content_format` parameter ("text"|"raw"). 30 MCP tools, 150-test acceptance suite.
+**Latest**: v2.1.2 (May 11, 2026) — Dependency updates (boto3, pydantic-settings, python-multipart, rich). No application changes, acceptance suite still 150/150 green. 30 MCP tools.
 
 ---
 
