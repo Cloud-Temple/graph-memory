@@ -34,7 +34,7 @@ python-dotenv>=1.0.0
 
 # === Utilitaires ===
 tenacity>=8.0.0          # Retry logic avec backoff
-python-multipart>=0.0.6  # File uploads
+python-multipart>=0.0.27  # File uploads
 aiofiles>=23.0.0         # Async file operations
 PyYAML>=6.0              # Parsing des ontologies YAML
 
