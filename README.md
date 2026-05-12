@@ -282,6 +282,7 @@ cp .env.example .env
 | `RAG_CHUNK_LIMIT`            | `8`            | Nombre max de chunks retournés par Qdrant             |
 | `CHUNK_SIZE`                 | `500`          | Taille cible en tokens par chunk                      |
 | `CHUNK_OVERLAP`              | `50`           | Tokens de chevauchement entre chunks                  |
+| `PROXY_URL`                  | _(aucun)_      | Proxy HTTP sortant pour S3, LLM et embeddings (ex: `http://10.185.132.250:3128`). Variable custom — pas `HTTP_PROXY` — injectée manuellement pour ne pas forcer le proxy sur toutes les libs Python. Non supporté pour Neo4j et Qdrant. |
 
 Voir `.env.example` pour la liste complète.
 

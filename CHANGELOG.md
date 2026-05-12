@@ -1,4 +1,17 @@
-l# Changelog
+# Changelog
+
+## [Unreleased]
+
+### Added
+- **PROXY_URL** — variable d'environnement optionnelle pour router les appels
+  S3 (boto3 SigV2 + SigV4), LLM extraction (`ExtractorService`) et embeddings
+  (`EmbeddingService`) via un proxy HTTP sortant.
+  - Injectée manuellement (`boto3.Config(proxies=...)`, `httpx.AsyncClient(proxy=...)`)
+    pour ne **pas** affecter les autres libs Python qui lisent automatiquement
+    `HTTP_PROXY` / `HTTPS_PROXY`.
+  - Validation fail-fast au démarrage : doit commencer par `http://` ou `https://`.
+  - Non supporté pour Neo4j (driver bolt) et Qdrant (client natif sans param proxy).
+  - Log au démarrage si active : `[StorageService] S3 requests via proxy …`
 
 ## [2.1.1] - 2026-04-03
 

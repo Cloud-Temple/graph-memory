@@ -40,15 +40,23 @@ class StorageService:
         # Région Dell ECS Cloud Temple
         region = settings.s3_region_name if settings.s3_region_name else "fr1"
         
+        # Proxy HTTP sortant — utilise PROXY_URL (variable custom) plutôt que
+        # HTTP_PROXY/HTTPS_PROXY pour ne pas affecter les autres libs Python.
+        proxy_url = settings.proxy_url.strip() or None
+        _proxies: dict | None = (
+            {"http": proxy_url, "https": proxy_url} if proxy_url else None
+        )
+
         # Client SigV2 pour PUT/GET/DELETE (opérations sur objets)
         # Tests validés: PUT ✅, GET ✅, DELETE ✅
         config_v2 = Config(
             region_name=region,
             signature_version='s3',  # SigV2 legacy
             s3={'addressing_style': 'path'},
-            retries={'max_attempts': 3, 'mode': 'adaptive'}
+            retries={'max_attempts': 3, 'mode': 'adaptive'},
+            **({"proxies": _proxies} if _proxies else {}),
         )
-        
+
         self._client_v2 = boto3.client(
             's3',
             endpoint_url=settings.s3_endpoint_url,
@@ -57,16 +65,17 @@ class StorageService:
             region_name=region,
             config=config_v2
         )
-        
+
         # Client SigV4 pour HEAD/LIST (opérations métadonnées)
         # Utilisé en fallback si SigV2 échoue sur ces opérations
         config_v4 = Config(
             region_name=region,
             signature_version='s3v4',
             s3={'addressing_style': 'path', 'payload_signing_enabled': False},
-            retries={'max_attempts': 3, 'mode': 'adaptive'}
+            retries={'max_attempts': 3, 'mode': 'adaptive'},
+            **({"proxies": _proxies} if _proxies else {}),
         )
-        
+
         self._client_v4 = boto3.client(
             's3',
             endpoint_url=settings.s3_endpoint_url,
@@ -75,6 +84,12 @@ class StorageService:
             region_name=region,
             config=config_v4
         )
+
+        if proxy_url:
+            print(
+                f"[StorageService] S3 requests via proxy {proxy_url}",
+                file=__import__("sys").stderr,
+            )
         
         # Client par défaut (SigV2 pour compatibilité maximale)
         self._client = self._client_v2

@@ -8,6 +8,7 @@ depuis les variables d'environnement ou un fichier .env.
 
 from functools import lru_cache
 from typing import Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -105,7 +106,26 @@ class Settings(BaseSettings):
     extraction_timeout_seconds: int = 600  # 10 min par appel LLM (gros docs avec chain-of-thought)
     s3_upload_timeout_seconds: int = 60
     neo4j_query_timeout_seconds: int = 30
-    
+
+    # =========================================================================
+    # Proxy HTTP sortant (optionnel)
+    # =========================================================================
+    # Variable CUSTOM — pas HTTP_PROXY/HTTPS_PROXY — pour ne pas forcer le proxy
+    # sur toutes les libs Python (boto3, httpx, requests…).
+    # Injecté manuellement dans boto3 (S3), httpx (LLM extraction + embeddings).
+    # Non supporté pour Neo4j et Qdrant (clients sans paramètre proxy explicite).
+    proxy_url: str = ""
+
+    @model_validator(mode="after")
+    def _validate_proxy_url(self) -> "Settings":
+        """Vérifie que PROXY_URL est une URL valide si renseignée."""
+        if self.proxy_url and not self.proxy_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"PROXY_URL must start with http:// or https://, "
+                f"got '{self.proxy_url[:50]}'"
+            )
+        return self
+
     @property
     def llmaas_base_url(self) -> str:
         """URL complète pour le client OpenAI (compatible OpenAI)."""
