@@ -2,7 +2,21 @@ name: CI — Build & Push
 
 # Déclencheurs :
 #   - push sur n'importe quelle branche  → image taguée avec le nom de branche
-#   - push d'un tag v*                   → image taguée vX.Y.Z + vX.Y + latest
+#   - push d'un tag v*                   → tags selon la convention ci-dessous
+#
+# Convention de tags Docker :
+# ┌─────────────────────┬─────────────────────────────────────────────────────┐
+# │ Git ref             │ Tags Docker produits                                │
+# ├─────────────────────┼─────────────────────────────────────────────────────┤
+# │ branch: main        │ :main                                               │
+# │ branch: dev         │ :dev                                                │
+# │ branch: feature/foo │ :feature-foo                                        │
+# │ tag: v2.1.1         │ :2.1.1  :2.1  :latest   (release stable)           │
+# │ tag: v2.1.1-rc.1    │ :2.1.1-rc.1             (pre-release, pas d'alias) │
+# │ tag: v2.1.1-dev     │ :2.1.1-dev              (pre-release, pas d'alias) │
+# └─────────────────────┴─────────────────────────────────────────────────────┘
+# Règle : un tag contenant un tiret (vX.Y.Z-*) est une pré-release →
+#         pas de :X.Y ni de :latest pour éviter de pointer une version instable.
 on:
   push:
     branches:
@@ -19,12 +33,6 @@ env:
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
   # Job — Build multi-arch + push GHCR
-  #
-  # Stratégie de tags automatique (via docker/metadata-action) :
-  #   - branche main       → ghcr.io/cloud-temple/graph-memory:main
-  #   - branche dev        → ghcr.io/cloud-temple/graph-memory:dev
-  #   - branche feature/xx → ghcr.io/cloud-temple/graph-memory:feature-xx
-  #   - tag v2.1.1         → ghcr.io/cloud-temple/graph-memory:2.1.1  :2.1  :latest
   # ─────────────────────────────────────────────────────────────────────────
   build:
     name: Build & Push Docker Image
@@ -52,6 +60,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Génération automatique des tags et labels OCI
+      # IS_STABLE_TAG = true ssi le ref est un tag vX.Y.Z SANS tiret (release stable).
+      # Les pré-releases (v2.1.1-rc.1, v2.1.1-dev, …) ont un tiret → IS_STABLE_TAG=false.
+      - name: Detect stable tag
+        id: tag_type
+        run: |
+          REF="${{ github.ref }}"
+          if [[ "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "is_stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -60,12 +80,12 @@ jobs:
           tags: |
             # Branches → tag avec le nom de branche (main, dev, feature-xxx, …)
             type=ref,event=branch
-            # Tags semver → version complète (ex: v2.1.1 → 2.1.1)
+            # Tags semver → version complète (ex: v2.1.1 → 2.1.1 ; v2.1.1-rc.1 → 2.1.1-rc.1)
             type=semver,pattern={{version}}
-            # Tags semver → major.minor  (ex: v2.1.1 → 2.1)
-            type=semver,pattern={{major}}.{{minor}}
-            # :latest uniquement sur les tags vX.Y.Z (pas sur les branches)
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # :X.Y uniquement pour les releases stables (pas de tiret dans le tag)
+            type=semver,pattern={{major}}.{{minor}},enable=${{ steps.tag_type.outputs.is_stable }}
+            # :latest uniquement pour les releases stables (pas de tiret dans le tag)
+            type=raw,value=latest,enable=${{ steps.tag_type.outputs.is_stable }}
 
       - name: Build and Push
         uses: docker/build-push-action@v6
