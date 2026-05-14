@@ -117,10 +117,12 @@ services:
       # Server config
       - MCP_SERVER_DEBUG=${MCP_SERVER_DEBUG:-false}
       - ADMIN_BOOTSTRAP_KEY=${ADMIN_BOOTSTRAP_KEY}
+      # Proxy HTTP sortant (optionnel — ne pas définir si absent)
+      # - PROXY_URL=${PROXY_URL:-}
     healthcheck:
-      # /health est un endpoint léger qui retourne le status du service + version.
-      # Avec Streamable HTTP (v1.4.0+), l'ancien endpoint /sse n'existe plus.
-      test: ["CMD-SHELL", "curl -sf http://localhost:8002/health -o /dev/null 2>/dev/null"]
+      # python est toujours disponible dans l'image — pas de dépendance à curl.
+      # Adapter le port si MCP_SERVER_PORT est surchargé.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=5)\" 2>/dev/null"]
       interval: 30s
       timeout: 10s
       start_period: 10s

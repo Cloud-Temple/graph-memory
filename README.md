@@ -6,6 +6,13 @@ Service de mémoire persistante basé sur un **graphe de connaissances** pour le
 
 Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
+[![CI](https://github.com/Cloud-Temple/graph-memory/actions/workflows/build.yml/badge.svg)](https://github.com/Cloud-Temple/graph-memory/actions/workflows/build.yml)
+[![Docker](https://img.shields.io/badge/ghcr.io-cloud--temple%2Fgraph--memory-blue?logo=docker)](https://ghcr.io/cloud-temple/graph-memory)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)]()
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)]()
+[![MCP](https://img.shields.io/badge/protocol-MCP-purple.svg)]()
+[![Python](https://img.shields.io/badge/python-3.11+-yellow.svg)]()
+
 <p align="center">
   <img src="screenshoot/screen1.png" alt="Graph Memory — Visualisation du graphe de connaissances" width="800">
 </p>
@@ -275,6 +282,7 @@ cp .env.example .env
 | `RAG_CHUNK_LIMIT`            | `8`            | Nombre max de chunks retournés par Qdrant             |
 | `CHUNK_SIZE`                 | `500`          | Taille cible en tokens par chunk                      |
 | `CHUNK_OVERLAP`              | `50`           | Tokens de chevauchement entre chunks                  |
+| `PROXY_URL`                  | _(aucun)_      | Proxy HTTP sortant pour S3, LLM et embeddings (ex: `http://10.185.132.250:3128`). Variable custom — pas `HTTP_PROXY` — injectée manuellement pour ne pas forcer le proxy sur toutes les libs Python. Non supporté pour Neo4j et Qdrant. |
 
 Voir `.env.example` pour la liste complète.
 

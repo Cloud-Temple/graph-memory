@@ -13,6 +13,7 @@ Utilisé pour :
 import sys
 from typing import Optional, List
 
+import httpx
 from openai import AsyncOpenAI
 from openai import APIError, APITimeoutError
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -29,16 +30,31 @@ class EmbeddingService:
     """
     
     def __init__(self):
-        """Initialise le client OpenAI pour les embeddings."""
+        """Initialise le client OpenAI pour les embeddings.
+
+        Si PROXY_URL est définie, les appels d'embedding transitent par ce proxy
+        via un httpx.AsyncClient dédié. On n'utilise pas HTTP_PROXY/HTTPS_PROXY
+        pour ne pas affecter les autres libs Python.
+        """
         settings = get_settings()
-        
+
+        proxy_url = settings.proxy_url.strip() or None
+        _http_client = (
+            httpx.AsyncClient(proxy=httpx.Proxy(proxy_url))
+            if proxy_url
+            else None
+        )
+
         # Utilise le même client OpenAI que l'extracteur
         # L'API LLMaaS Cloud Temple est compatible OpenAI
         self._client = AsyncOpenAI(
             base_url=settings.llmaas_base_url,
             api_key=settings.llmaas_api_key,
-            timeout=60.0
+            timeout=60.0,
+            **({"http_client": _http_client} if _http_client else {}),
         )
+        if proxy_url:
+            print(f"[EmbeddingService] embedding requests via proxy {proxy_url}", file=sys.stderr)
         self._model = settings.llmaas_embedding_model
         self._dimensions = settings.llmaas_embedding_dimensions
     

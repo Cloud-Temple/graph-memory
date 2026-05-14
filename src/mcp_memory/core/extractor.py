@@ -11,6 +11,7 @@ import json
 from typing import Optional, List
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+import httpx
 from openai import AsyncOpenAI
 from openai import APIError, APITimeoutError
 
@@ -66,14 +67,29 @@ class ExtractorService:
     """
     
     def __init__(self):
-        """Initialise le client OpenAI compatible."""
+        """Initialise le client OpenAI compatible.
+
+        Si PROXY_URL est définie, les appels LLM transitent par ce proxy
+        via un httpx.AsyncClient dédié. On n'utilise pas HTTP_PROXY/HTTPS_PROXY
+        pour ne pas affecter les autres libs Python.
+        """
         settings = get_settings()
-        
+
+        proxy_url = settings.proxy_url.strip() or None
+        _http_client = (
+            httpx.AsyncClient(proxy=httpx.Proxy(proxy_url))
+            if proxy_url
+            else None
+        )
+
         self._client = AsyncOpenAI(
             base_url=settings.llmaas_base_url,
             api_key=settings.llmaas_api_key,
-            timeout=settings.extraction_timeout_seconds
+            timeout=settings.extraction_timeout_seconds,
+            **({"http_client": _http_client} if _http_client else {}),
         )
+        if proxy_url:
+            print(f"[ExtractorService] LLM requests via proxy {proxy_url}", file=sys.stderr)
         self._model = settings.llmaas_model
         self._max_tokens = settings.llmaas_max_tokens
         self._temperature = settings.llmaas_temperature

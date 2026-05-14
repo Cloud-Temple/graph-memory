@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **PROXY_URL** — variable d'environnement optionnelle pour router les appels
+  S3 (boto3 SigV2 + SigV4), LLM extraction (`ExtractorService`) et embeddings
+  (`EmbeddingService`) via un proxy HTTP sortant.
+  - Injectée manuellement (`boto3.Config(proxies=...)`, `httpx.AsyncClient(proxy=...)`)
+    pour ne **pas** affecter les autres libs Python qui lisent automatiquement
+    `HTTP_PROXY` / `HTTPS_PROXY`.
+  - Validation fail-fast au démarrage : doit commencer par `http://` ou `https://`.
+  - Non supporté pour Neo4j (driver bolt) et Qdrant (client natif sans param proxy).
+  - Log au démarrage si active : `[StorageService] S3 requests via proxy …`
+
+### Fixed
+- **`Dockerfile` : suppression du `HEALTHCHECK`** — Le healthcheck était hardcodé sur
+  le port 8002 dans l'image, provoquant l'arrêt du container (ExitCode=0 via SIGTERM
+  Swarm) dès que `MCP_SERVER_PORT` était différent de 8002. La responsabilité du
+  healthcheck appartient à l'orchestrateur (`docker-compose.yml`, Swarm stack, Kubernetes
+  probes) qui connaît la configuration réelle du déploiement.
+- **`docker-compose.yml` : healthcheck via `python` au lieu de `curl`** — Plus de
+  dépendance à un binaire externe ; disponible dans toute image Python de base.
+
+### Changed
+- **`.github/workflows/build.yml` : `:X.Y` et `:latest` réservés aux releases stables** — Les tags
+  pré-release (`v2.1.1-rc.1`, `v2.1.1-dev`, …) ne reçoivent plus d'alias `:X.Y` ni
+  `:latest`. Un step `Detect stable tag` détecte si le tag Git est de la forme
+  `vX.Y.Z` (sans tiret) pour activer ces alias. Conforme à la convention SemVer :
+  un tag avec suffixe = pré-release = ne pas pointer `latest`.
+
+---
+
 ## [2.1.2] - 2026-05-11
 
 ### 📦 Mises à jour de dépendances (Dependabot)
