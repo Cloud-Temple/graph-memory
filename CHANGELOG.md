@@ -23,7 +23,7 @@
   dépendance à un binaire externe ; disponible dans toute image Python de base.
 
 ### Changed
-- **`ci/build.yml` : `:X.Y` et `:latest` réservés aux releases stables** — Les tags
+- **`.github/workflows/build.yml` : `:X.Y` et `:latest` réservés aux releases stables** — Les tags
   pré-release (`v2.1.1-rc.1`, `v2.1.1-dev`, …) ne reçoivent plus d'alias `:X.Y` ni
   `:latest`. Un step `Detect stable tag` détecte si le tag Git est de la forme
   `vX.Y.Z` (sans tiret) pour activer ces alias. Conforme à la convention SemVer :
@@ -31,7 +31,30 @@
 
 ---
 
+## [2.1.2] - 2026-05-11
+
+### 📦 Mises à jour de dépendances (Dependabot)
+
+Release patch consacrée aux mises à jour de dépendances Python. Aucun changement applicatif, aucune modification d'API. La recette reste à 150/150 tests verts.
+
+**Dépendances mises à jour** :
+
+- **boto3** : `>=1.28.0` → `>=1.42.97` (#6) — SDK AWS, requis pour S3
+- **pydantic-settings** : `>=2.0.0` → `>=2.14.0` (#7) — Configuration via env
+- **python-multipart** : `>=0.0.6` → `>=0.0.27` (#5) — File uploads FastAPI
+- **rich** : `>=13.0.0` → `>=15.0.0` (#4) — Affichage CLI (tableaux, spinners)
+
+**PR Dependabot fermées sans merge** :
+
+- **#8** — `fastapi >=0.100.0, <0.110.0` : version cible morte (dernière `0.109.x`, déjà installée). Issue **#9** ouverte pour préparer la migration vers les versions FastAPI 0.110+ (changements de Pydantic v2, lifespan handlers).
+- **#3** — Bump Docker base image `python:3.11-slim` → `python:3.14-slim` : prématuré. Python 3.14 n'est sorti que début 2026, plusieurs dépendances (notamment `neo4j-driver`, `qdrant-client`) ne publient pas encore de wheels 3.14. Issue **#10** ouverte pour planifier la migration Python 3.12 → 3.13 → 3.14 par étapes.
+
+**Compatibilité** : aucune rupture. Toutes les versions cibles sont rétro-compatibles avec le code v2.1.1.
+
+---
+
 ## [2.1.1] - 2026-04-03
+
 
 ### 🐛 Fix `document_get(include_content=True)` sur fichiers binaires
 
