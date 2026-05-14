@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.1.3] - 2026-05-14
 
 ### Added
 - **PROXY_URL** — variable d'environnement optionnelle pour router les appels
