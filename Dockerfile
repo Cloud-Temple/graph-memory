@@ -52,9 +52,9 @@ EXPOSE 8002
 # Passer en utilisateur non-root
 USER mcp
 
-# Healthcheck via /health endpoint (léger, pas de fork Python)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -sf http://localhost:8002/health -o /dev/null 2>/dev/null
+# NOTE: Pas de HEALTHCHECK dans l'image — le port est configurable via MCP_SERVER_PORT.
+# La responsabilité du healthcheck appartient à l'orchestrateur (docker-compose.yml,
+# Swarm stack, Kubernetes liveness probe) qui connaît le port réel de déploiement.
 
 # Point d'entrée
 ENTRYPOINT ["python", "-m", "src.mcp_memory.server"]
