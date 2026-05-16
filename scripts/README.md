@@ -507,4 +507,93 @@ pip install httpx click rich prompt_toolkit
 
 ---
 
-*Graph Memory CLI v2.0.1 — Mars 2026*
+---
+
+## 🔄 Script de synchronisation — `refresh_graph_memory.py`
+
+Script autonome pour **synchroniser les fichiers locaux avec Graph Memory en production**. Ne nécessite aucune dépendance externe (stdlib Python uniquement).
+
+### Principe
+
+Le script compare les **hash SHA-256** des fichiers locaux avec ceux déjà ingérés dans Graph Memory. Il identifie automatiquement :
+
+| Catégorie | Description | Action |
+|-----------|-------------|--------|
+| ✅ **Synchronisés** | Hash identique local ↔ distant | Rien à faire |
+| ⚠️ **Modifiés** | Hash différent (fichier mis à jour) | Ré-ingestion `--force` |
+| 🆕 **Nouveaux** | Fichier local absent du serveur | Ingestion initiale |
+| 🗑️ **Obsolètes** | Document distant absent du local | Suppression |
+| 📋 **Doublons** | Plusieurs versions du même fichier | Suppression des anciennes |
+
+### Mémoires configurées
+
+| Mémoire | Sources locales | Ontologie |
+|---------|----------------|-----------|
+| **DOCS** | `product_sheets/` + `docs/docs/` | `cloud` |
+| **PRESALES** | `PRESALES/` | `presales` |
+| **JURIDIQUE** | `JURIDIQUE/` | `legal` |
+
+### Usage
+
+```bash
+# 1. Dry-run (affiche le plan sans rien exécuter) — TOUJOURS commencer par ça
+python3 scripts/refresh_graph_memory.py --url URL --token TOKEN
+
+# 2. Dry-run sur une seule mémoire
+python3 scripts/refresh_graph_memory.py --url URL --token TOKEN --memory DOCS
+
+# 3. Exécuter la synchronisation
+python3 scripts/refresh_graph_memory.py --url URL --token TOKEN --apply
+
+# 4. Avec variables d'environnement (recommandé)
+export MCP_URL=https://graph-mem.mcp.cloud-temple.app
+export MCP_TOKEN=your_token
+python3 scripts/refresh_graph_memory.py --apply
+
+# 5. Options de filtrage
+python3 scripts/refresh_graph_memory.py --apply --skip-obsolete    # Ne pas supprimer les anciens docs
+python3 scripts/refresh_graph_memory.py --apply --skip-duplicates  # Ne pas supprimer les doublons
+python3 scripts/refresh_graph_memory.py --apply --memory DOCS      # Une seule mémoire
+```
+
+### Workflow typique
+
+```bash
+# Étape 1 : Mettre à jour les submodules (product_sheets, docs)
+git submodule update --remote
+
+# Étape 2 : Voir ce qui a changé (dry-run)
+python3 scripts/refresh_graph_memory.py --url URL --token TOKEN
+
+# Étape 3 : Appliquer les changements
+python3 scripts/refresh_graph_memory.py --url URL --token TOKEN --apply
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--url URL` | URL du serveur Graph Memory (ou env `MCP_URL`) |
+| `--token TOKEN` | Token d'authentification (ou env `MCP_TOKEN`) |
+| `--memory {DOCS,PRESALES,JURIDIQUE}` | Synchroniser une seule mémoire (défaut: toutes) |
+| `--apply` | Exécuter les actions (sans ce flag = dry-run) |
+| `--skip-obsolete` | Ne pas supprimer les documents obsolètes |
+| `--skip-duplicates` | Ne pas supprimer les doublons |
+| `--base-dir DIR` | Répertoire racine du projet (défaut: auto-détecté) |
+
+### Architecture interne
+
+Le script embarque un **client MCP HTTP Streamable** complet (`GraphMemoryClient`) qui communique directement avec le serveur via JSON-RPC 2.0. Il ne dépend d'aucune bibliothèque tierce.
+
+```
+refresh_graph_memory.py
+├── GraphMemoryClient     # Client MCP (initialize, tools/call, SSE parsing)
+├── scan_local_files()    # Scanner SHA-256 des fichiers locaux
+├── compute_diff()        # Comparaison local ↔ distant par hash
+├── execute_sync()        # Orchestration delete/ingest
+└── main()                # CLI argparse + rapport formaté
+```
+
+---
+
+*Graph Memory CLI v2.2.0 — Mai 2026*
