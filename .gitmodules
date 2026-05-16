@@ -1,0 +1,6 @@
+[submodule "product_sheets"]
+	path = product_sheets
+	url = https://github.com/Cloud-Temple/product_sheets.git
+[submodule "docs"]
+	path = docs
+	url = https://github.com/Cloud-Temple/docs.git
