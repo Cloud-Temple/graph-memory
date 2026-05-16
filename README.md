@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.6.1).
 
-**Dernière version** : v2.1.2 (11 mai 2026) — Mises à jour de dépendances (boto3, pydantic-settings, python-multipart, rich). Aucun changement applicatif, recette toujours à 150/150 tests verts. 30 outils MCP.
+**Dernière version** : v2.2.0 (16 mai 2026) — Submodules Git (`product_sheets` + `docs`), nouveau script `refresh_graph_memory.py` pour synchroniser les fichiers locaux avec Graph Memory en production. 30 outils MCP, 150/150 tests.
 
 ---
 
@@ -888,4 +888,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v2.1.2 — Mai 2026*
+*Graph Memory v2.2.0 — Mai 2026*

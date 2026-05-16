@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.2.0] - 2026-05-16
+
+### 🔄 Submodules Git & Script de synchronisation Graph Memory
+
+**Submodules Git** : les dossiers `product_sheets/` et `docs/` sont désormais de vrais **submodules Git**, remplaçant les repos imbriqués et copies manuelles précédentes. Mise à jour via `git submodule update --remote`.
+
+- `product_sheets` → [`Cloud-Temple/product_sheets`](https://github.com/Cloud-Temple/product_sheets.git)
+- `docs` → [`Cloud-Temple/docs`](https://github.com/Cloud-Temple/docs.git)
+
+**Nouveau script `scripts/refresh_graph_memory.py`** — Outil de synchronisation intelligente des fichiers locaux avec une instance Graph Memory en production :
+
+- **Comparaison par hash SHA-256** : détecte automatiquement les fichiers nouveaux, modifiés, obsolètes et les doublons
+- **3 mémoires configurées** : `DOCS` (product_sheets + docs), `PRESALES`, `JURIDIQUE`
+- **Mode dry-run par défaut** : affiche le plan complet sans rien exécuter, `--apply` pour lancer
+- **Client MCP HTTP Streamable intégré** : zéro dépendance externe (stdlib Python uniquement)
+- **Filtres** : `--memory` (une seule mémoire), `--skip-obsolete`, `--skip-duplicates`
+- **Credentials** : `--url`/`--token` ou variables d'environnement `MCP_URL`/`MCP_TOKEN`
+
+**Fichiers modifiés** :
+- `.gitmodules` (NOUVEAU) — définition des 2 submodules
+- `.gitignore` — retrait de `/DOCS/` et `/product_sheets/`
+- `scripts/refresh_graph_memory.py` (NOUVEAU) — ~500 lignes, entièrement documenté
+- `VERSION` — 2.1.2 → 2.2.0
+
+---
+
 ## [2.1.2] - 2026-05-11
 
 ### 📦 Mises à jour de dépendances (Dependabot)
