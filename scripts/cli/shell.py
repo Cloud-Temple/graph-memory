@@ -26,6 +26,7 @@ Commandes :
   docs              Lister les documents
   ingest <path>     Ingérer un document (--force)
   ingestdir <path>  Ingérer un répertoire (--exclude, --confirm, --force)
+  docget <id>       Lire un document
   deldoc <id>       Supprimer un document
   --- Exploration ---
   entities          Entités par type
@@ -37,13 +38,18 @@ Commandes :
   check [id]        Vérifier cohérence S3/graphe
   cleanup           Lister orphelins S3 (--confirm pour supprimer)
   ontologies        Lister les ontologies
+  ontology-get      Afficher une ontologie YAML
+  ontology-export   Exporter une ontologie YAML
+  ontology-import   Importer une ontologie YAML
+  ontology-update   Mettre à jour une ontologie YAML
+  ontology-delete   Supprimer une ontologie
   --- Tokens ---
   tokens            Lister les tokens actifs
   token-create <c>  Créer un token
   token-revoke <h>  Révoquer un token
   token-update <h>  Modifier un token (--permissions, --add-memories, etc.)
   --- Backup ---
-  backup-create     Créer un backup
+  backup-create     Créer un backup (sans id = toutes les mémoires en admin)
   backup-list       Lister les backups
   backup-restore    Restaurer depuis un backup
   backup-download   Télécharger en tar.gz
@@ -95,7 +101,8 @@ from .ingest_progress import run_ingest_with_progress
 SHELL_COMMANDS = [
     "help", "about", "health", "whoami", "list", "use", "info", "graph", "docs",
     "entities", "entity", "relations", "ask", "query", "check", "cleanup",
-    "create", "update", "ingest", "ingestdir", "deldoc", "ontologies",
+    "create", "update", "ingest", "ingestdir", "docget", "deldoc", "ontologies",
+    "ontology-get", "ontology-export", "ontology-import", "ontology-update", "ontology-delete",
     "tokens", "token-create", "token-revoke", "token-update",
     # Aliases legacy (appellent admin_update_token)
     "token-grant", "token-ungrant", "token-set", "token-promote", "token-set-email",
@@ -801,6 +808,53 @@ async def cmd_deldoc(client: MCPClient, state: dict, args: str, json_output: boo
         show_error(result.get("message", str(result)))
 
 
+async def cmd_docget(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """
+    Lit un document de la mémoire courante.
+
+    Usage: docget <document_id> [output_file] [--raw]
+    """
+    mem = state.get("memory")
+    if not mem:
+        show_warning("Sélectionnez d'abord une mémoire avec 'use <id>'")
+        return
+    if not args.strip():
+        show_warning("Usage: docget <document_id> [output_file] [--raw]")
+        return
+
+    raw = "--raw" in args
+    clean_args = args.replace("--raw", "").strip()
+    parts = clean_args.split(maxsplit=1)
+    doc_id = parts[0]
+    output = parts[1].strip() if len(parts) > 1 else None
+
+    result = await client.call_tool("document_get", {
+        "memory_id": mem,
+        "document_id": doc_id,
+        "include_content": True,
+        "content_format": "raw" if raw else "text",
+    })
+    if json_output:
+        show_json(result)
+    elif result.get("status") == "ok":
+        if output:
+            if result.get("content_base64"):
+                with open(output, "wb") as f:
+                    f.write(base64.b64decode(result.get("content_base64", "")))
+            else:
+                with open(output, "w", encoding="utf-8") as f:
+                    f.write(result.get("content", ""))
+            show_success(f"Document écrit: {output}")
+        else:
+            content = result.get("content", "")
+            if content:
+                console.print(Syntax(content, "markdown", theme="monokai", line_numbers=True))
+            else:
+                show_json(result)
+    else:
+        show_error(result.get("message", str(result)))
+
+
 # =============================================================================
 # Handlers de commandes — Exploration
 # =============================================================================
@@ -983,6 +1037,106 @@ async def cmd_ontologies(client: MCPClient, state: dict, json_output: bool = Fal
         console.print(table)
     else:
         show_error(result.get("message", "Erreur"))
+
+
+async def cmd_ontology_get(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Affiche le YAML d'une ontologie."""
+    name = args.strip()
+    if not name:
+        show_warning("Usage: ontology-get <name>")
+        return
+    result = await client.call_tool("ontology_get", {"name": name})
+    if json_output:
+        show_json(result)
+    elif result.get("status") == "ok":
+        console.print(Syntax(result.get("content", ""), "yaml", theme="monokai", line_numbers=True))
+    else:
+        show_error(result.get("message", "Erreur"))
+
+
+async def cmd_ontology_export(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Exporte une ontologie YAML."""
+    if not args.strip():
+        show_warning("Usage: ontology-export <name> [output_file]")
+        return
+    parts = args.split(maxsplit=1)
+    name = parts[0]
+    output = parts[1].strip() if len(parts) > 1 else None
+    result = await client.call_tool("ontology_export", {"name": name})
+    if json_output:
+        show_json(result)
+    elif result.get("status") == "ok":
+        out_file = output or result.get("filename", f"{name}.yaml")
+        with open(out_file, "w", encoding="utf-8") as f:
+            f.write(result.get("content", ""))
+        show_success(f"Ontologie exportée: {out_file}")
+    else:
+        show_error(result.get("message", "Erreur"))
+
+
+async def cmd_ontology_import(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Importe une ontologie YAML."""
+    if not args.strip():
+        show_warning("Usage: ontology-import <yaml_file> [--overwrite]")
+        return
+    overwrite = "--overwrite" in args
+    yaml_file = args.replace("--overwrite", "").strip()
+    if not yaml_file or not os.path.isfile(yaml_file):
+        show_error(f"Fichier non trouvé: {yaml_file or '?'}")
+        return
+    with open(yaml_file, "r", encoding="utf-8") as f:
+        content = f.read()
+    result = await client.call_tool("ontology_import", {
+        "content_yaml": content,
+        "overwrite": overwrite,
+    })
+    _json_or_show(result, json_output,
+                  lambda r: show_success(f"Ontologie importée: {r.get('name', yaml_file)}"))
+
+
+async def cmd_ontology_update(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Remplace le YAML d'une ontologie."""
+    if not args.strip():
+        show_warning("Usage: ontology-update <name> <yaml_file>")
+        return
+    parts = args.split(maxsplit=1)
+    if len(parts) < 2:
+        show_warning("Usage: ontology-update <name> <yaml_file>")
+        return
+    name, yaml_file = parts[0], parts[1].strip()
+    if not os.path.isfile(yaml_file):
+        show_error(f"Fichier non trouvé: {yaml_file}")
+        return
+    with open(yaml_file, "r", encoding="utf-8") as f:
+        content = f.read()
+    result = await client.call_tool("ontology_update", {
+        "name": name,
+        "content_yaml": content,
+    })
+    _json_or_show(result, json_output,
+                  lambda r: show_success(f"Ontologie mise à jour: {r.get('name', name)}"))
+
+
+async def cmd_ontology_delete(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Supprime une ontologie."""
+    from rich.prompt import Confirm
+
+    if not args.strip():
+        show_warning("Usage: ontology-delete <name> [--force] [--confirm]")
+        return
+    force = "--force" in args
+    confirmed = "--confirm" in args
+    name = args.replace("--force", "").replace("--confirm", "").strip()
+    if not name:
+        show_warning("Usage: ontology-delete <name> [--force] [--confirm]")
+        return
+    if not confirmed and not json_output:
+        if not Confirm.ask(f"[yellow]Supprimer l'ontologie '{name}' ?[/yellow]"):
+            console.print("[dim]Annulé.[/dim]")
+            return
+    result = await client.call_tool("ontology_delete", {"name": name, "force": force})
+    _json_or_show(result, json_output,
+                  lambda r: show_success(r.get("message", f"Ontologie supprimée: {name}")))
 
 
 # =============================================================================
@@ -1269,18 +1423,17 @@ async def cmd_token_set_email(client: MCPClient, state: dict, args: str, json_ou
 # =============================================================================
 
 async def cmd_backup_create(client: MCPClient, state: dict, args: str, json_output: bool = False):
-    """Crée un backup de la mémoire courante ou spécifiée."""
+    """Crée un backup de la mémoire courante/spécifiée, ou de toutes les mémoires en admin."""
     parts = args.split(maxsplit=1) if args else []
     mem = parts[0] if parts else state.get("memory")
     description = parts[1].strip('"').strip("'") if len(parts) > 1 else None
-    
-    if not mem:
-        show_warning("Usage: backup-create [memory_id] [description]")
-        return
-    
+
     if not json_output:
-        console.print(f"[dim]💾 Backup de '{mem}' en cours...[/dim]")
-    params = {"memory_id": mem}
+        target = mem or "toutes les mémoires"
+        console.print(f"[dim]💾 Backup de '{target}' en cours...[/dim]")
+    params = {}
+    if mem:
+        params["memory_id"] = mem
     if description:
         params["description"] = description
     
@@ -1479,6 +1632,7 @@ def run_shell(url: str, token: str):
         "docs":         "Lister les documents",
         "ingest <path>":"Ingérer un fichier (--force pour réingérer)",
         "ingestdir <p>":"Ingérer un répertoire (--exclude, --confirm, --force)",
+        "docget <id>":  "Lire un document de la mémoire courante",
         "deldoc <id>":  "Supprimer un document",
         # --- Exploration ---
         "entities":     "Entités par type (avec descriptions)",
@@ -1491,6 +1645,11 @@ def run_shell(url: str, token: str):
         "cleanup":      "Lister les orphelins S3 (--confirm pour supprimer)",
         # --- Ontologies ---
         "ontologies":   "Lister les ontologies disponibles",
+        "ontology-get <name>": "Afficher le YAML d'une ontologie",
+        "ontology-export <name> [file]": "Exporter une ontologie YAML",
+        "ontology-import <file>": "Importer une ontologie YAML (--overwrite)",
+        "ontology-update <name> <file>": "Remplacer le YAML d'une ontologie",
+        "ontology-delete <name>": "Supprimer une ontologie (--force, --confirm)",
         # --- Tokens (v2.0) ---
         "tokens":               "Lister les tokens actifs",
         "token-create <c>":     "Créer un token (ex: token-create quoteflow read,write JURIDIQUE)",
@@ -1605,6 +1764,9 @@ def run_shell(url: str, token: str):
             elif command == "ingestdir":
                 asyncio.run(cmd_ingestdir(client, state, args, json_output=json_output))
 
+            elif command == "docget":
+                asyncio.run(cmd_docget(client, state, args, json_output=json_output))
+
             elif command == "deldoc":
                 asyncio.run(cmd_deldoc(client, state, args, json_output=json_output))
 
@@ -1640,6 +1802,21 @@ def run_shell(url: str, token: str):
 
             elif command == "ontologies":
                 asyncio.run(cmd_ontologies(client, state, json_output=json_output))
+
+            elif command == "ontology-get":
+                asyncio.run(cmd_ontology_get(client, state, args, json_output=json_output))
+
+            elif command == "ontology-export":
+                asyncio.run(cmd_ontology_export(client, state, args, json_output=json_output))
+
+            elif command == "ontology-import":
+                asyncio.run(cmd_ontology_import(client, state, args, json_output=json_output))
+
+            elif command == "ontology-update":
+                asyncio.run(cmd_ontology_update(client, state, args, json_output=json_output))
+
+            elif command == "ontology-delete":
+                asyncio.run(cmd_ontology_delete(client, state, args, json_output=json_output))
 
             elif command == "limit":
                 if args.strip():

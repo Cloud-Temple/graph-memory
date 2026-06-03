@@ -9,6 +9,12 @@ import base64
 import os
 import sys
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Ajouter le dossier parent pour les imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from scripts.cli.client import MCPClient, ServerNotRunningError
@@ -17,8 +23,8 @@ from scripts.cli.client import MCPClient, ServerNotRunningError
 # Configuration
 # =============================================================================
 
-MCP_URL = os.environ.get("MCP_URL", "http://localhost:8002")
-ADMIN_TOKEN = os.environ.get("MCP_TOKEN", "")
+MCP_URL = os.environ.get("MCP_URL", "http://localhost:8070")
+ADMIN_TOKEN = os.environ.get("MCP_TOKEN") or os.environ.get("ADMIN_BOOTSTRAP_KEY", "")
 
 # Mémoires de test
 MEMORY_A = "TEST-RECETTE-A"

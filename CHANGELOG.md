@@ -1,5 +1,40 @@
 # Changelog
 
+## [3.0.0] - 2026-06-03
+
+### 🖥️ Console web d'administration Graph Memory
+
+Release majeure introduisant une console `/admin` pour Graph Memory, alignée sur le look & feel de Live Memory.
+
+- **Nouvelle interface `/admin`** : dashboard, ontologies, mémoires, documents, questions/requêtes, tokens, backups et storage
+- **Dashboard enrichi** : statistiques Graph Memory sur services, mémoires, documents, entités, relations, ontologies, backups, tokens et capacités MCP
+- **Authentification web sécurisée** : login via `/api/login`, cookie HttpOnly `graphmem_auth`, logout via `/api/logout`
+- **Proxy d'administration `/api/tool`** : appels génériques vers les outils MCP existants, qui restent la source de vérité fonctionnelle
+- **Ingestion fichier depuis l'admin** : upload navigateur vers `memory_ingest`, avec support `force`, `source_path` et date de modification source
+- **Résultats JSON/YAML lisibles** : les résultats d'actions admin s'ouvrent en grandes modales à onglets avec coloration JSON/YAML, au lieu d'être injectés en grand bloc inline
+- **Anti-cache admin** : assets `/admin` versionnés et servis en `no-store` pour éviter de conserver un ancien `admin-app.js`
+- **Modales tokens refondues** : permissions en checkboxes, scope mémoire explicite et sélection de mémoires sans champs CSV bruts
+- **Synchro CLI/Admin** : le CLI Click et le shell exposent désormais le CRUD ontologies, `document_get`, le backup global et restent alignés avec `/admin`
+- **Restore archive dans `/admin`** : le module Backups permet de restaurer une archive tar.gz locale via `backup_restore_archive`
+- **Tests anti-régression admin/CLI** : contrôles statiques renforcés pour bloquer les actions admin non câblées, les anciennes modales CSV et les écarts fonctionnels CLI/Admin
+- **Transport MCP local fiabilisé** : le client CLI ignore les variables proxy système (`trust_env=False`) pour éviter que `localhost` parte vers un proxy externe
+- **WAF recalibré pour la recette v3** : limite `/mcp` portée à 2000 requêtes/minute, cohérente avec les 150+ contrôles et les agents
+- **`system_about` corrigé** : capacités exposées à 35 outils MCP, avec la catégorie Ontologies complète
+- **Nouvelle ontologie** : ajout du référentiel `cloud-service-management`
+- **Backups globaux** : `Create Backup` accepte désormais `all memories` et déclenche un backup admin de toutes les mémoires
+- **Port WAF local par défaut** : `8070` côté host pour éviter le conflit avec Live Memory sur `8080`
+
+**Fichiers modifiés** :
+- `VERSION` — 2.2.0 → 3.0.0
+- `src/mcp_memory/auth/middleware.py` — routes `/admin`, `/api/login`, `/api/logout`, `/api/tool`
+- `src/mcp_memory/static/admin.html` — console admin
+- `src/mcp_memory/static/css/admin.css` — thème admin
+- `src/mcp_memory/static/js/admin-api.js` — couche API admin
+- `src/mcp_memory/static/js/admin-app.js` — application admin
+- `ONTOLOGIES/cloud-service-management.yaml` — nouvelle ontologie
+
+---
+
 ## [2.2.0] - 2026-05-16
 
 ### 🔄 Submodules Git & Script de synchronisation Graph Memory

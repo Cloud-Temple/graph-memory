@@ -6,12 +6,16 @@ Vérifie le header Authorization et valide le token via TokenManager.
 """
 
 import hmac
+import json
 import os
 import sys
 from typing import Optional
 
 from ..config import get_settings
 from .context import current_auth
+
+
+AUTH_COOKIE_NAME = "graphmem_auth"
 
 
 # NOTE: HostNormalizerMiddleware supprimé (migration SSE → Streamable HTTP).
@@ -58,9 +62,20 @@ class AuthMiddleware:
         path = scope.get("path", "")
         
         # Endpoints publics (pas d'auth requise)
-        # Note: /api/ N'EST PLUS public — nécessite un token Bearer
-        public_paths = ["/health", "/healthz", "/ready", "/graph", "/static/"]
-        if any(path.startswith(p) for p in public_paths):
+        # Note: /api/ N'EST PLUS public — sauf login/logout web.
+        public_paths = {
+            "/health",
+            "/healthz",
+            "/ready",
+            "/graph",
+            "/graph/",
+            "/admin",
+            "/admin/",
+            "/api/login",
+            "/api/logout",
+        }
+        public_prefixes = ("/static/",)
+        if path in public_paths or any(path.startswith(p) for p in public_prefixes):
             await self.app(scope, receive, send)
             return
         
@@ -74,24 +89,13 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
         
-        # Récupérer le header Authorization
-        headers = dict(scope.get("headers", []))
-        auth_header = headers.get(b"authorization", b"").decode("utf-8")
-        
-        if not auth_header:
+        token = self._extract_token(scope)
+
+        if not token:
             if self.debug:
                 print(f"❌ [Auth] Header Authorization manquant pour {path}", file=sys.stderr)
             await self._send_error(send, 401, "Authorization header required")
             return
-        
-        # Parser le Bearer token
-        if not auth_header.startswith("Bearer "):
-            if self.debug:
-                print(f"❌ [Auth] Format invalide (attendu: Bearer <token>)", file=sys.stderr)
-            await self._send_error(send, 401, "Invalid authorization format. Use: Bearer <token>")
-            return
-        
-        token = auth_header[7:]  # Retire "Bearer "
         
         # Vérifier si c'est la clé bootstrap admin
         # Sécurité v2.1.0 : comparaison constant-time (anti timing attack)
@@ -141,11 +145,33 @@ class AuthMiddleware:
             if self.debug:
                 print(f"❌ [Auth] Erreur validation: {e}", file=sys.stderr)
             await self._send_error(send, 500, "Authentication error")
+
+    def _extract_token(self, scope) -> Optional[str]:
+        """Extrait un token depuis Bearer, cookie HttpOnly ou query string legacy."""
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode("utf-8")
+        if auth_header:
+            if auth_header.startswith("Bearer "):
+                return auth_header[7:]
+            return None
+
+        cookie_header = headers.get(b"cookie", b"").decode("utf-8", errors="ignore")
+        if cookie_header:
+            for raw in cookie_header.split(";"):
+                pair = raw.strip().split("=", 1)
+                if len(pair) == 2 and pair[0].strip() == AUTH_COOKIE_NAME:
+                    value = pair[1].strip()
+                    if value:
+                        return value
+
+        qs = scope.get("query_string", b"").decode("utf-8", errors="ignore")
+        for param in qs.split("&"):
+            if param.startswith("token="):
+                return param[6:]
+        return None
     
     async def _send_error(self, send, status: int, message: str):
         """Envoie une réponse d'erreur HTTP."""
-        import json
-        
         body = json.dumps({"error": message}).encode()
         
         await send({
@@ -212,6 +238,10 @@ class StaticFilesMiddleware:
     
     Routes:
     - GET /graph -> Page de visualisation
+    - GET /admin -> Console d'administration
+    - POST /api/login -> Login web avec cookie HttpOnly
+    - POST /api/logout -> Logout web
+    - POST /api/tool -> Proxy d'outils MCP pour la console admin
     - GET /api/memories -> Liste des mémoires (JSON)
     - GET /api/graph/<memory_id> -> Graphe complet (JSON)
     """
@@ -253,6 +283,11 @@ class StaticFilesMiddleware:
         if path == "/graph" or path == "/graph/":
             await self._serve_file(send, "graph.html", "text/html")
             return
+
+        # Console admin
+        if path == "/admin" or path == "/admin/":
+            await self._serve_file(send, "admin.html", "text/html; charset=utf-8")
+            return
         
         # Fichiers statiques (CSS, JS)
         if path.startswith("/static/"):
@@ -266,6 +301,32 @@ class StaticFilesMiddleware:
         # Health check
         if path in ("/health", "/healthz", "/ready"):
             await self._api_health(send)
+            return
+
+        # API REST - Login admin web
+        if path == "/api/login" and method == "POST":
+            try:
+                body = await self._read_body_limited(receive, max_bytes=8192)
+            except ValueError as e:
+                await self._send_json(send, {"status": "error", "message": str(e)}, 413)
+                return
+            await self._api_login(scope, send, body)
+            return
+
+        # API REST - Logout admin web
+        if path == "/api/logout" and method == "POST":
+            await self._api_logout(send)
+            return
+
+        # API REST - Proxy outils MCP (console admin)
+        if path == "/api/tool" and method == "POST":
+            try:
+                max_body = max(2 * 1024 * 1024, int(get_settings().max_document_size_bytes * 1.5))
+                body = await self._read_body_limited(receive, max_bytes=max_body)
+            except ValueError as e:
+                await self._send_json(send, {"status": "error", "message": str(e)}, 413)
+                return
+            await self._api_tool(send, body)
             return
         
         # API REST - Liste des mémoires
@@ -304,6 +365,173 @@ class StaticFilesMiddleware:
             if not message.get("more_body", False):
                 break
         return body
+
+    async def _read_body_limited(self, receive, max_bytes: int) -> bytes:
+        """Lit le corps d'une requête avec limite anti-DoS."""
+        body = b""
+        while True:
+            message = await receive()
+            body += message.get("body", b"")
+            if len(body) > max_bytes:
+                raise ValueError("Request body too large")
+            if not message.get("more_body", False):
+                break
+        return body
+
+    async def _api_login(self, scope, send, body: bytes):
+        """Valide un token et pose un cookie HttpOnly pour l'interface web."""
+        try:
+            try:
+                payload = json.loads(body.decode("utf-8")) if body else {}
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                await self._send_json(send, {"status": "error", "message": "Body JSON invalide"}, 400)
+                return
+
+            token = (payload.get("token") or "").strip()
+            if not token:
+                await self._send_json(send, {"status": "error", "message": "Champ 'token' requis"}, 400)
+                return
+
+            token_info = None
+            bootstrap_key = get_settings().admin_bootstrap_key
+            if bootstrap_key and hmac.compare_digest(token, bootstrap_key):
+                token_info = {
+                    "type": "bootstrap",
+                    "client_name": "admin",
+                    "permissions": ["admin", "read", "write"],
+                    "memory_ids": [],
+                }
+            else:
+                try:
+                    token_obj = await self._get_token_manager().validate_token(token)
+                    if token_obj:
+                        token_info = {
+                            "type": "token",
+                            "client_name": token_obj.client_name,
+                            "permissions": token_obj.permissions,
+                            "memory_ids": token_obj.memory_ids,
+                            "token_hash": token_obj.token_hash,
+                        }
+                except Exception:
+                    token_info = None
+
+            if token_info is None:
+                await self._send_json(send, {"status": "error", "message": "Token invalide"}, 401)
+                return
+
+            headers = dict(scope.get("headers", []))
+            forwarded_proto = headers.get(b"x-forwarded-proto", b"").decode().lower()
+            scheme = scope.get("scheme", "http").lower()
+            is_https = scheme == "https" or forwarded_proto == "https"
+            cookie_parts = [
+                f"{AUTH_COOKIE_NAME}={token}",
+                "Path=/",
+                "HttpOnly",
+                "SameSite=Strict",
+            ]
+            if is_https:
+                cookie_parts.append("Secure")
+
+            response = {
+                "status": "ok",
+                "client_name": token_info.get("client_name", "?"),
+                "permissions": token_info.get("permissions", []),
+                "memory_ids": token_info.get("memory_ids", []),
+                "auth_type": token_info.get("type", "?"),
+            }
+            response_body = json.dumps(response, ensure_ascii=False).encode("utf-8")
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"application/json; charset=utf-8"),
+                    (b"content-length", str(len(response_body)).encode()),
+                    (b"set-cookie", "; ".join(cookie_parts).encode()),
+                ],
+            })
+            await send({"type": "http.response.body", "body": response_body})
+        except ValueError as e:
+            await self._send_json(send, {"status": "error", "message": str(e)}, 413)
+        except Exception as e:
+            await self._send_json(send, {"status": "error", "message": str(e)}, 500)
+
+    def _get_token_manager(self):
+        """Lazy-load TokenManager pour les handlers statiques."""
+        if not hasattr(self, "_token_manager") or self._token_manager is None:
+            from .token_manager import get_token_manager
+            self._token_manager = get_token_manager()
+        return self._token_manager
+
+    async def _api_logout(self, send):
+        """Supprime le cookie d'authentification web."""
+        expired_cookie = f"{AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+        body = json.dumps({"status": "ok"}).encode("utf-8")
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [
+                (b"content-type", b"application/json; charset=utf-8"),
+                (b"content-length", str(len(body)).encode()),
+                (b"set-cookie", expired_cookie.encode()),
+            ],
+        })
+        await send({"type": "http.response.body", "body": body})
+
+    async def _api_tool(self, send, body: bytes):
+        """Proxy REST vers les outils MCP, utilisé par /admin."""
+        try:
+            # La console admin sert à gérer : read-only peut utiliser /graph.
+            from .context import check_write_permission
+            perm_err = check_write_permission()
+            if perm_err:
+                await self._send_json(send, perm_err, 403)
+                return
+
+            try:
+                payload = json.loads(body.decode("utf-8")) if body else {}
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                await self._send_json(send, {"status": "error", "message": "Body JSON invalide"}, 400)
+                return
+
+            tool_name = (payload.get("tool") or "").strip()
+            arguments = payload.get("arguments") or {}
+            if not tool_name:
+                await self._send_json(send, {"status": "error", "message": "Champ 'tool' requis"}, 400)
+                return
+            if not isinstance(arguments, dict):
+                await self._send_json(send, {"status": "error", "message": "'arguments' doit être un objet"}, 400)
+                return
+
+            result = await self._call_tool_direct(tool_name, arguments)
+            await self._send_json(send, result)
+        except ValueError as e:
+            await self._send_json(send, {"status": "error", "message": str(e)}, 413)
+        except Exception as e:
+            print(f"❌ [/api/tool] {e}", file=sys.stderr)
+            await self._send_json(send, {"status": "error", "message": "Erreur interne /api/tool"}, 500)
+
+    async def _call_tool_direct(self, tool_name: str, arguments: dict) -> dict:
+        """Appelle directement un outil enregistré dans FastMCP."""
+        from ..server import mcp
+
+        tool_manager = mcp._tool_manager
+        tools = getattr(tool_manager, "_tools", {})
+        if tool_name not in tools:
+            return {"status": "error", "message": f"Outil inconnu: {tool_name}"}
+
+        tool_obj = tools[tool_name]
+        fn = None
+        for attr in ("fn", "func", "handler", "_fn", "run", "callback"):
+            candidate = getattr(tool_obj, attr, None)
+            if candidate and callable(candidate):
+                fn = candidate
+                break
+
+        if fn is None:
+            return {"status": "error", "message": f"Outil {tool_name}: handler introuvable"}
+
+        result = await fn(**arguments)
+        return result if isinstance(result, dict) else {"status": "ok", "data": result}
     
     def _read_version(self) -> str:
         """Lit la version depuis le fichier VERSION."""
@@ -486,6 +714,7 @@ class StaticFilesMiddleware:
     
     async def _serve_file(self, send, filename: str, content_type: str):
         """Sert un fichier statique."""
+        filename = filename.split("?", 1)[0]
         filepath = os.path.join(self._static_dir, filename)
         
         if not os.path.exists(filepath):
@@ -502,7 +731,9 @@ class StaticFilesMiddleware:
                 "headers": [
                     (b"content-type", content_type.encode()),
                     (b"content-length", str(len(body)).encode()),
-                    (b"cache-control", b"no-cache"),
+                    (b"cache-control", b"no-store, no-cache, must-revalidate, max-age=0"),
+                    (b"pragma", b"no-cache"),
+                    (b"expires", b"0"),
                 ],
             })
             await send({

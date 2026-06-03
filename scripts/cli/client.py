@@ -92,10 +92,20 @@ class MCPClient:
         """
         import asyncio
         import sys
+        import httpx
         from mcp import ClientSession
         from mcp.client.streamable_http import streamablehttp_client
 
         headers = {"Authorization": f"Bearer {self.token}"}
+
+        def _httpx_client_factory(headers=None, timeout=None, auth=None):
+            return httpx.AsyncClient(
+                follow_redirects=True,
+                headers=headers,
+                timeout=timeout,
+                auth=auth,
+                trust_env=False,
+            )
 
         last_error = None
         for attempt in range(1, max_retries + 1):
@@ -104,7 +114,8 @@ class MCPClient:
                     f"{self.base_url}/mcp",
                     headers=headers,
                     timeout=30,              # connexion initiale : 30s
-                    sse_read_timeout=900     # attente réponse : 15 min (extraction LLM de gros docs)
+                    sse_read_timeout=900,    # attente réponse : 15 min (extraction LLM de gros docs)
+                    httpx_client_factory=_httpx_client_factory,
                 ) as (read, write, _):
                     async with ClientSession(read, write) as session:
                         await session.initialize()

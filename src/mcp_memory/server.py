@@ -1855,6 +1855,255 @@ async def ontology_list() -> dict:
         return {"status": "error", "message": str(e)}
 
 
+def _safe_ontology_name(name: str) -> str:
+    """Valide un nom d'ontologie pour éviter path traversal et noms ambigus."""
+    import re
+    value = (name or "").strip()
+    if not value:
+        raise ValueError("Nom d'ontologie requis")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", value):
+        raise ValueError("Nom d'ontologie invalide (lettres, chiffres, _ et - uniquement)")
+    return value
+
+
+def _ontology_dir() -> str:
+    """Retourne le dossier ONTOLOGIES actif."""
+    from .core.ontology import get_ontology_manager
+    ontology_manager = get_ontology_manager()
+    path = getattr(ontology_manager, "_ontology_path", None)
+    if not path or not os.path.isdir(path):
+        raise ValueError("Dossier ONTOLOGIES introuvable")
+    return path
+
+
+def _ontology_file_for_name(name: str) -> Optional[str]:
+    """Trouve le fichier YAML correspondant au champ name d'une ontologie."""
+    safe_name = _safe_ontology_name(name)
+    directory = _ontology_dir()
+    direct = os.path.join(directory, f"{safe_name}.yaml")
+    if os.path.exists(direct):
+        return direct
+
+    import yaml
+    for filename in os.listdir(directory):
+        if not filename.endswith((".yaml", ".yml")):
+            continue
+        filepath = os.path.join(directory, filename)
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            if data.get("name") == safe_name:
+                return filepath
+        except Exception:
+            continue
+    return None
+
+
+def _load_ontology_yaml(content_yaml: str) -> dict:
+    """Parse et valide le minimum structurel d'une ontologie YAML."""
+    import yaml
+    try:
+        data = yaml.safe_load(content_yaml) or {}
+    except yaml.YAMLError as e:
+        raise ValueError(f"YAML invalide: {e}")
+
+    name = _safe_ontology_name(str(data.get("name", "")))
+    if not isinstance(data.get("entity_types"), list) or not data["entity_types"]:
+        raise ValueError("entity_types doit être une liste non vide")
+    if not isinstance(data.get("relation_types"), list) or not data["relation_types"]:
+        raise ValueError("relation_types doit être une liste non vide")
+    data["name"] = name
+    return data
+
+
+@mcp.tool()
+async def ontology_get(
+    name: Annotated[str, Field(description="Nom de l'ontologie")]
+) -> dict:
+    """
+    Lit une ontologie avec son contenu YAML brut.
+
+    Args:
+        name: Nom de l'ontologie
+
+    Returns:
+        Métadonnées + contenu YAML
+    """
+    try:
+        _safe_ontology_name(name)
+        filepath = _ontology_file_for_name(name)
+        if not filepath:
+            return {"status": "error", "message": f"Ontologie '{name}' non trouvée"}
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        data = _load_ontology_yaml(content)
+        return {
+            "status": "ok",
+            "name": data.get("name"),
+            "version": str(data.get("version", "")),
+            "description": data.get("description", ""),
+            "filename": os.path.basename(filepath),
+            "entity_types_count": len(data.get("entity_types", [])),
+            "relation_types_count": len(data.get("relation_types", [])),
+            "content": content,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def ontology_export(
+    name: Annotated[str, Field(description="Nom de l'ontologie")]
+) -> dict:
+    """
+    Exporte une ontologie en YAML et base64.
+
+    Args:
+        name: Nom de l'ontologie
+
+    Returns:
+        Contenu YAML + content_base64 pour téléchargement
+    """
+    result = await ontology_get(name)
+    if result.get("status") != "ok":
+        return result
+    content = result.get("content", "")
+    return {
+        "status": "ok",
+        "name": result.get("name"),
+        "filename": result.get("filename") or f"{name}.yaml",
+        "content": content,
+        "content_base64": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+    }
+
+
+@mcp.tool()
+async def ontology_import(
+    content_yaml: Annotated[str, Field(description="Contenu YAML de l'ontologie")],
+    overwrite: Annotated[bool, Field(default=False, description="Écraser si l'ontologie existe déjà")] = False
+) -> dict:
+    """
+    Importe une nouvelle ontologie dans le référentiel ONTOLOGIES/.
+
+    Requiert la permission admin.
+    """
+    try:
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+
+        data = _load_ontology_yaml(content_yaml)
+        name = data["name"]
+        directory = _ontology_dir()
+        existing = _ontology_file_for_name(name)
+        if existing and not overwrite:
+            return {
+                "status": "error",
+                "message": f"Ontologie '{name}' existe déjà. Utilisez overwrite=true pour l'écraser."
+            }
+
+        filepath = existing or os.path.join(directory, f"{name}.yaml")
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content_yaml.rstrip() + "\n")
+
+        from .core.ontology import get_ontology_manager
+        get_ontology_manager().reload()
+        return {
+            "status": "ok",
+            "name": name,
+            "filename": os.path.basename(filepath),
+            "message": f"Ontologie '{name}' importée",
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def ontology_update(
+    name: Annotated[str, Field(description="Nom de l'ontologie à modifier")],
+    content_yaml: Annotated[str, Field(description="Nouveau contenu YAML complet")]
+) -> dict:
+    """
+    Remplace le contenu YAML d'une ontologie existante.
+
+    Requiert la permission admin.
+    """
+    try:
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+
+        safe_name = _safe_ontology_name(name)
+        filepath = _ontology_file_for_name(safe_name)
+        if not filepath:
+            return {"status": "error", "message": f"Ontologie '{safe_name}' non trouvée"}
+
+        data = _load_ontology_yaml(content_yaml)
+        if data["name"] != safe_name:
+            return {
+                "status": "error",
+                "message": "Le champ YAML 'name' doit rester identique. Utilisez import pour créer une nouvelle ontologie."
+            }
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content_yaml.rstrip() + "\n")
+
+        from .core.ontology import get_ontology_manager
+        get_ontology_manager().reload()
+        return {
+            "status": "ok",
+            "name": safe_name,
+            "filename": os.path.basename(filepath),
+            "message": f"Ontologie '{safe_name}' mise à jour",
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def ontology_delete(
+    name: Annotated[str, Field(description="Nom de l'ontologie à supprimer")],
+    force: Annotated[bool, Field(default=False, description="Supprimer même si des mémoires l'utilisent")] = False
+) -> dict:
+    """
+    Supprime une ontologie du référentiel ONTOLOGIES/.
+
+    Par défaut, refuse la suppression si une mémoire existante utilise cette
+    ontologie. Requiert la permission admin.
+    """
+    try:
+        admin_err = check_admin_permission()
+        if admin_err:
+            return admin_err
+
+        safe_name = _safe_ontology_name(name)
+        filepath = _ontology_file_for_name(safe_name)
+        if not filepath:
+            return {"status": "error", "message": f"Ontologie '{safe_name}' non trouvée"}
+
+        memories = await get_graph().list_memories()
+        users = [m.id for m in memories if m.ontology == safe_name]
+        if users and not force:
+            return {
+                "status": "error",
+                "message": f"Ontologie utilisée par {len(users)} mémoire(s): {users}. Utilisez force=true si c'est volontaire.",
+                "used_by": users,
+            }
+
+        os.remove(filepath)
+        from .core.ontology import get_ontology_manager
+        get_ontology_manager().reload()
+        return {
+            "status": "deleted",
+            "name": safe_name,
+            "filename": os.path.basename(filepath),
+            "used_by": users,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @mcp.tool()
 async def storage_check(
     memory_id: Annotated[Optional[str], Field(default=None, description="ID d'une mémoire spécifique (optionnel, toutes si omis)")] = None
@@ -2182,14 +2431,15 @@ async def system_about() -> dict:
         
         # Outils MCP disponibles (comptage par catégorie)
         tools_categories = {
-            "Gestion mémoires": ["memory_create", "memory_delete", "memory_list", "memory_stats"],
+            "Gestion mémoires": ["memory_create", "memory_update", "memory_delete", "memory_list", "memory_stats"],
             "Ingestion": ["memory_ingest"],
             "Recherche & Q&A": ["memory_search", "memory_query", "memory_get_context", "question_answer"],
             "Documents": ["document_list", "document_get", "document_delete"],
+            "Ontologies": ["ontology_list", "ontology_get", "ontology_export", "ontology_import", "ontology_update", "ontology_delete"],
             "Backup/Restore": ["backup_create", "backup_list", "backup_restore", "backup_download", "backup_delete", "backup_restore_archive"],
             "Administration": ["admin_create_token", "admin_list_tokens", "admin_revoke_token", "admin_update_token"],
             "Diagnostic": ["system_health", "system_about", "system_whoami", "storage_check", "storage_cleanup"],
-            "Visualisation": ["memory_graph", "ontology_list"],
+            "Visualisation": ["memory_graph"],
         }
         total_tools = sum(len(v) for v in tools_categories.values())
         
@@ -2349,25 +2599,68 @@ async def system_whoami() -> dict:
 
 @mcp.tool()
 async def backup_create(
-    memory_id: Annotated[str, Field(description="ID de la mémoire à sauvegarder")],
+    memory_id: Annotated[Optional[str], Field(default=None, description="ID de la mémoire à sauvegarder. Si omis, sauvegarde toutes les mémoires (admin uniquement).")] = None,
     description: Annotated[Optional[str], Field(default=None, description="Description optionnelle du backup")] = None,
     ctx: Optional[Context] = None
 ) -> dict:
     """
-    Crée un backup complet d'une mémoire sur S3.
+    Crée un backup complet d'une mémoire, ou de toutes les mémoires pour un admin.
     
     Exporte le graphe Neo4j (entités, relations, documents),
     les vecteurs Qdrant (embeddings), et les références des documents S3.
     Applique la politique de rétention (BACKUP_RETENTION_COUNT).
     
     Args:
-        memory_id: ID de la mémoire à sauvegarder
+        memory_id: ID de la mémoire à sauvegarder. Si omis, backup de toutes les mémoires.
         description: Description optionnelle du backup
         
     Returns:
         backup_id, statistiques, temps d'exécution
     """
     try:
+        memory_id = (memory_id or "").strip()
+
+        async def _progress(msg):
+            if ctx:
+                try:
+                    await ctx.info(msg)
+                except Exception:
+                    pass
+
+        if not memory_id:
+            admin_err = check_admin_permission()
+            if admin_err:
+                return admin_err
+
+            memories = await get_graph().list_memories()
+            results = []
+            errors = []
+            for memory in memories:
+                try:
+                    result = await get_backup().create_backup(
+                        memory_id=memory.id,
+                        description=description,
+                        progress_callback=_progress
+                    )
+                    results.append(result)
+                except Exception as e:
+                    errors.append({"memory_id": memory.id, "message": str(e)})
+
+            return {
+                "status": "ok" if not errors else "error",
+                "mode": "all_memories",
+                "requested_count": len(memories),
+                "created_count": len(results),
+                "error_count": len(errors),
+                "backups": results,
+                "errors": errors,
+                "message": (
+                    f"{len(results)} backup(s) créé(s)"
+                    if not errors
+                    else f"{len(results)} backup(s) créé(s), {len(errors)} erreur(s)"
+                ),
+            }
+
         # Sécurité : vérifier accès mémoire + permission write
         access_err = check_memory_access(memory_id)
         if access_err:
@@ -2375,13 +2668,6 @@ async def backup_create(
         write_err = check_write_permission()
         if write_err:
             return write_err
-        
-        async def _progress(msg):
-            if ctx:
-                try:
-                    await ctx.info(msg)
-                except Exception:
-                    pass
         
         result = await get_backup().create_backup(
             memory_id=memory_id,

@@ -164,6 +164,140 @@ def ontologies_cmd(ctx, jflag):
     _run_tool(ctx, "ontology_list", {}, _show, jflag)
 
 
+@cli.group()
+def ontology():
+    """🧬 Gérer les ontologies."""
+    pass
+
+
+@ontology.command("list")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ontology_list(ctx, jflag):
+    """📖 Lister les ontologies disponibles."""
+    def _show(result):
+        from rich.table import Table
+        ontologies = result.get("ontologies", [])
+        table = Table(title=f"📖 Ontologies ({len(ontologies)})")
+        table.add_column("Nom", style="cyan")
+        table.add_column("Description", style="white")
+        table.add_column("Types", style="dim")
+        for o in ontologies:
+            table.add_row(
+                o.get("name", ""),
+                o.get("description", "")[:50],
+                f"{o.get('entity_types_count', 0)} entités, {o.get('relation_types_count', 0)} relations"
+            )
+        console.print(table)
+    _run_tool(ctx, "ontology_list", {}, _show, jflag)
+
+
+@ontology.command("get")
+@click.argument("name")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ontology_get(ctx, name, jflag):
+    """👁️  Afficher le YAML d'une ontologie."""
+    def _show(result):
+        syntax = Syntax(result.get("content", ""), "yaml", theme="monokai", line_numbers=True)
+        console.print(syntax)
+    _run_tool(ctx, "ontology_get", {"name": name}, _show, jflag)
+
+
+@ontology.command("export")
+@click.argument("name")
+@click.option("--output", "-o", default=None, help="Fichier de sortie (défaut: <name>.yaml)")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ontology_export(ctx, name, output, jflag):
+    """📤 Exporter une ontologie en YAML."""
+    async def _run():
+        try:
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("ontology_export", {"name": name})
+            if jflag:
+                show_json(result)
+            elif result.get("status") == "ok":
+                out_file = output or result.get("filename", f"{name}.yaml")
+                with open(out_file, "w", encoding="utf-8") as f:
+                    f.write(result.get("content", ""))
+                show_success(f"Ontologie exportée: {out_file}")
+            else:
+                show_error(result.get("message", str(result)))
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+@ontology.command("import")
+@click.argument("yaml_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--overwrite", is_flag=True, help="Remplacer si l'ontologie existe déjà")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ontology_import(ctx, yaml_file, overwrite, jflag):
+    """📥 Importer une ontologie YAML."""
+    async def _run():
+        try:
+            with open(yaml_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("ontology_import", {
+                "content_yaml": content,
+                "overwrite": overwrite,
+            })
+            if jflag:
+                show_json(result)
+            elif result.get("status") in ("ok", "created"):
+                show_success(f"Ontologie importée: {result.get('name', yaml_file)}")
+            else:
+                show_error(result.get("message", str(result)))
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+@ontology.command("update")
+@click.argument("name")
+@click.argument("yaml_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ontology_update(ctx, name, yaml_file, jflag):
+    """✏️  Remplacer le YAML d'une ontologie existante."""
+    async def _run():
+        try:
+            with open(yaml_file, "r", encoding="utf-8") as f:
+                content = f.read()
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("ontology_update", {
+                "name": name,
+                "content_yaml": content,
+            })
+            if jflag:
+                show_json(result)
+            elif result.get("status") == "ok":
+                show_success(f"Ontologie mise à jour: {result.get('name', name)}")
+            else:
+                show_error(result.get("message", str(result)))
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+@ontology.command("delete")
+@click.argument("name")
+@click.option("--force", is_flag=True, help="Forcer même si des mémoires utilisent l'ontologie")
+@click.option("--confirm", is_flag=True, help="Confirmer la suppression")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ontology_delete(ctx, name, force, confirm, jflag):
+    """🗑️  Supprimer une ontologie."""
+    if not confirm and not jflag and not Confirm.ask(f"[yellow]Supprimer l'ontologie '{name}' ?[/yellow]"):
+        console.print("[dim]Annulé.[/dim]")
+        return
+    _run_tool(ctx, "ontology_delete", {"name": name, "force": force},
+              lambda r: show_success(r.get("message", f"Ontologie supprimée: {name}")), jflag)
+
+
 # =============================================================================
 # Memory
 # =============================================================================
@@ -575,6 +709,49 @@ def document_list(ctx, memory_id, jflag):
               lambda r: show_documents_table(r.get("documents", []), memory_id), jflag)
 
 
+@document.command("get")
+@click.argument("memory_id")
+@click.argument("document_id")
+@click.option("--content-format", type=click.Choice(["text", "raw"]), default="text",
+              help="Format de contenu: text ou raw")
+@click.option("--output", "-o", default=None, help="Fichier de sortie pour le contenu")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def document_get(ctx, memory_id, document_id, content_format, output, jflag):
+    """👁️  Lire un document ingéré."""
+    async def _run():
+        try:
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("document_get", {
+                "memory_id": memory_id,
+                "document_id": document_id,
+                "include_content": True,
+                "content_format": content_format,
+            })
+            if jflag:
+                show_json(result)
+            elif result.get("status") == "ok":
+                if output:
+                    if result.get("content_base64"):
+                        with open(output, "wb") as f:
+                            f.write(base64.b64decode(result.get("content_base64", "")))
+                    else:
+                        with open(output, "w", encoding="utf-8") as f:
+                            f.write(result.get("content", ""))
+                    show_success(f"Document écrit: {output}")
+                else:
+                    content = result.get("content", "")
+                    if content:
+                        console.print(Syntax(content, "markdown", theme="monokai", line_numbers=True))
+                    else:
+                        show_json(result)
+            else:
+                show_error(result.get("message", str(result)))
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
 @document.command("delete")
 @click.argument("memory_id")
 @click.argument("document_id")
@@ -819,15 +996,18 @@ def backup():
 
 
 @backup.command("create")
-@click.argument("memory_id")
+@click.argument("memory_id", required=False, default=None)
 @click.option("--description", "-d", default=None, help="Description du backup")
 @click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
 @click.pass_context
 def backup_create(ctx, memory_id, description, jflag):
-    """💾 Créer un backup complet d'une mémoire."""
+    """💾 Créer un backup complet d'une mémoire, ou de toutes les mémoires en admin."""
     if not jflag:
-        console.print(f"[dim]💾 Backup de '{memory_id}' en cours...[/dim]")
-    params = {"memory_id": memory_id}
+        target = memory_id or "toutes les mémoires"
+        console.print(f"[dim]💾 Backup de '{target}' en cours...[/dim]")
+    params = {}
+    if memory_id:
+        params["memory_id"] = memory_id
     if description:
         params["description"] = description
     _run_tool(ctx, "backup_create", params, show_backup_result, jflag)

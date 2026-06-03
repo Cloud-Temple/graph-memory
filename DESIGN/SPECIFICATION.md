@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 2.2.0 | **Date** : 16 mai 2026
+> **Version** : 3.0.0 | **Date** : 3 juin 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 
@@ -152,7 +152,7 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
                                │ Streamable HTTP + Bearer Token
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│              Coraza WAF (Port 8080 — seul port exposé)               │
+│              Coraza WAF (Port 8070 — seul port exposé)               │
 │  OWASP CRS · Rate Limiting · CSP · HSTS · Let's Encrypt (prod)       │
 └──────────────────────────────┬───────────────────────────────────────┘
                                │ réseau Docker interne (mcp-network)
@@ -225,7 +225,7 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
 
 ```yaml
 services:
-  waf:          # Port 8080 exposé (seul point d'entrée)
+  waf:          # Port 8070 exposé côté host (seul point d'entrée)
   mcp-memory:   # Port 8002 interne uniquement
   neo4j:        # Ports 7474/7687 internes uniquement
   qdrant:       # Port 6333 interne uniquement
@@ -798,7 +798,7 @@ Règles :
 
 - Container non-root : `USER mcp` dans le Dockerfile
 - Neo4j/Qdrant sur réseau interne uniquement (pas de ports exposés)
-- Seul le port 8080 (WAF) est accessible de l'extérieur
+- Seul le port 8070 (WAF) est accessible de l'extérieur
 
 ---
 
@@ -880,7 +880,7 @@ backup-{memory_id}-{timestamp}.tar.gz
 
 ### 10.1 Architecture
 
-Accessible via `http://localhost:8080/graph` (à travers le WAF).
+Accessible via `http://localhost:8070/graph` (à travers le WAF).
 
 ```
 graph.html                  — Page principale
@@ -1021,7 +1021,7 @@ token update HASH --email user@example.com
 | :------: | ---------------- | --------------------- | ------------------------------- |
 |    1     | `MCP_URL`        | `MCP_TOKEN`           | Shell export                    |
 |    2     | `MCP_SERVER_URL` | `ADMIN_BOOTSTRAP_KEY` | `.env` via `load_dotenv()`      |
-|    3     | —                | —                     | Défaut: `http://localhost:8080` |
+|    3     | —                | —                     | Défaut: `http://localhost:8070` |
 
 ---
 
@@ -1143,7 +1143,7 @@ cd graph-memory
 cp .env.example .env
 # Éditer .env avec vos credentials
 docker compose up -d
-curl http://localhost:8080/health
+curl http://localhost:8070/health
 ```
 
 ### 14.2 Production
@@ -1157,7 +1157,7 @@ curl http://localhost:8080/health
 - Serveur : `prod-docker02` (192.168.10.21)
 - URL : `https://graph-mem.mcp.cloud-temple.app`
 - TLS : reverse proxy nginx en amont
-- WAF : mode HTTP `:8080`
+- WAF : mode HTTP exposé côté host sur `:8070`
 
 ### 14.3 Mise à jour
 
@@ -1173,7 +1173,7 @@ docker compose up -d mcp-memory
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8070/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN"
       }
@@ -1271,5 +1271,5 @@ graph-memory/
 
 ---
 
-*Graph Memory v2.2.0 — Cahier de Spécification — 16 mai 2026*
+*Graph Memory v3.0.0 — Cahier de Spécification — 3 juin 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*
