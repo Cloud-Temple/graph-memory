@@ -380,11 +380,15 @@ async def run(admin: MCPClient, client_rw: MCPClient, client_ro: MCPClient, **ct
         version = identity.get("version", "?")
         ok(f"  → version: {version}")
         capabilities = result.get("capabilities", {})
-        if capabilities.get("total_tools") == 35:
+        if capabilities.get("total_tools") == 40:
             ok("  → total_tools MCP exact")
         else:
             fail("  → total_tools MCP exact", f"total_tools={capabilities.get('total_tools')}")
         categories = capabilities.get("categories", {})
+        if categories.get("Ingestion asynchrone") == 5:
+            ok("  → catégorie Ingestion asynchrone (5 outils)")
+        else:
+            fail("  → catégorie Ingestion asynchrone", f"obtenu {categories.get('Ingestion asynchrone')}")
         if categories.get("Ontologies") == 6:
             ok("  → catégorie Ontologies complète")
         else:

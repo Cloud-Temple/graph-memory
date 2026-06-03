@@ -469,35 +469,10 @@ async def memory_ingest(
         Résultat de l'ingestion avec statistiques
     """
     try:
-        import time as _time
-        import gc
-        _t0 = _time.monotonic()
-        _steps_log = []
-        
-        def _mem_mb():
-            """Retourne l'usage mémoire RSS du processus en MB."""
-            try:
-                import resource
-                return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024)  # macOS = bytes
-            except Exception:
-                return 0
-        
-        # Helper pour logger les étapes (ctx.info si disponible + stderr)
-        async def _log(msg):
-            mem = _mem_mb()
-            _steps_log.append({"t": round(_time.monotonic() - _t0, 1), "msg": msg})
-            print(f"📋 [Ingest] {msg} [RSS={mem:.0f}MB]", file=sys.stderr)
-            sys.stderr.flush()
-            if ctx:
-                try:
-                    await ctx.info(msg)
-                except Exception:
-                    pass
-        
         # Sécurité v2.1.0 : valider les entrées (anti injection S3/path traversal)
         validate_memory_id(memory_id)
         filename = validate_filename(filename)
-        
+
         # Vérifier l'accès à la mémoire + permission write
         access_err = check_memory_access(memory_id)
         if access_err:
@@ -505,25 +480,24 @@ async def memory_ingest(
         write_err = check_write_permission()
         if write_err:
             return write_err
-        
+
         # Décoder le contenu (libérer content_base64 ensuite — peut être volumineux)
         content = base64.b64decode(content_base64)
         content_size = len(content)
-        await _log(f"📦 Décodage: {content_size} bytes ({filename})")
         del content_base64
-        
+        if ctx:
+            try:
+                await ctx.info(f"📦 Décodage: {content_size} bytes ({filename})")
+            except Exception:
+                pass
+
         # Sécurité v2.1.0 : limite de taille document (anti DoS)
         validate_document_size(content, settings.max_document_size_bytes)
-        
-        # Vérifier si la mémoire existe
-        memory = await get_graph().get_memory(memory_id)
-        if not memory:
-            return {"status": "error", "message": f"Mémoire '{memory_id}' non trouvée"}
-        
-        # Calculer le hash pour déduplication
+
+        # Calculer le hash (déduplication + clé de changement)
         doc_hash = get_storage().compute_hash(content)
-        
-        # Vérifier si déjà ingéré
+
+        # Déduplication historique par hash (sémantique synchrone conservée)
         existing = await get_graph().get_document_by_hash(memory_id, doc_hash)
         if existing and not force:
             return {
@@ -532,205 +506,31 @@ async def memory_ingest(
                 "filename": existing.filename,
                 "message": "Document déjà ingéré (utilisez force=true pour réingérer)"
             }
-        
-        # Si force=True et document existant, supprimer l'ancien d'abord
-        if existing and force:
-            await _log("🔄 Suppression de l'ancienne version...")
-            delete_result = await get_graph().delete_document(memory_id, existing.id)
-            print(f"🔄 [Ingest] Ancien supprimé: {delete_result.get('entities_deleted', 0)} entités orphelines, "
-                  f"{delete_result.get('relations_deleted', 0)} relations", file=sys.stderr)
-        
-        # Upload vers S3
-        await _log("📤 Upload S3...")
-        s3_result = await get_storage().upload_document(
+        replace_doc_id = existing.id if (existing and force) else None
+
+        # Relai vers le pipeline factorisé (commun avec l'ingestion asynchrone).
+        # Le pipeline finalise ingestion_status="succeeded" après Qdrant.
+        async def _progress_cb(step: str, percent: int, extra: dict):
+            if ctx:
+                try:
+                    await ctx.info(extra.get("message", step))
+                except Exception:
+                    pass
+
+        from .core.ingest_pipeline import run_ingest_pipeline
+        return await run_ingest_pipeline(
             memory_id=memory_id,
-            filename=filename,
             content=content,
-            metadata=metadata
-        )
-        await _log("✅ Upload S3 terminé")
-        
-        # Extraire le texte du document
-        file_ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
-        await _log(f"📄 Extraction texte ({file_ext})...")
-        text = _extract_text(content, filename)
-        
-        if not text:
-            return {
-                "status": "warning",
-                "message": "Document uploadé mais extraction texte impossible",
-                "s3_uri": s3_result["uri"]
-            }
-        
-        await _log(f"📄 Texte extrait: {len(text)} caractères")
-        
-        # Libérer les bytes bruts (on a le texte + déjà uploadé S3)
-        del content
-        gc.collect()
-        
-        # Extraction des entités/relations via LLM avec l'ontologie de la mémoire
-        if not memory.ontology:
-            return {
-                "status": "error",
-                "message": f"La mémoire '{memory_id}' n'a pas d'ontologie définie. "
-                           f"Recréez-la avec une ontologie valide."
-            }
-        
-        # Progress callback pour l'extracteur → route vers ctx.info()
-        async def _extraction_progress(event: str, data: dict):
-            if event == "extraction_start":
-                mode = data.get("mode", "single")
-                chunks_total = data.get("chunks_total", 1)
-                text_len = data.get("text_length", 0)
-                if mode == "chunked":
-                    await _log(f"🔍 Extraction LLM: {chunks_total} chunks ({text_len} chars)")
-                else:
-                    await _log(f"🔍 Extraction LLM: 1 chunk ({text_len} chars)")
-            elif event == "extraction_chunk_done":
-                chunk = data.get("chunk", 0)
-                total = data.get("chunks_total", 1)
-                e_new = data.get("entities_new", 0)
-                r_new = data.get("relations_new", 0)
-                e_cum = data.get("entities_cumul", 0)
-                r_cum = data.get("relations_cumul", 0)
-                await _log(f"🔍 Chunk {chunk}/{total} terminé: +{e_new}E +{r_new}R (cumul: {e_cum}E {r_cum}R)")
-        
-        await _log(f"🔍 Démarrage extraction LLM (ontologie: {memory.ontology})...")
-        extraction = await get_extractor().extract_with_ontology_chunked(
-            text, memory.ontology, progress_callback=_extraction_progress
-        )
-        await _log(f"✅ Extraction terminée: {len(extraction.entities)} entités, {len(extraction.relations)} relations")
-        
-        # Déduire le type de fichier depuis l'extension
-        file_ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
-        
-        # Créer le document dans le graphe avec métadonnées enrichies
-        await _log("📊 Stockage dans le graphe Neo4j...")
-        doc_id = str(uuid.uuid4())
-        document = await get_graph().add_document(
-            memory_id=memory_id,
-            doc_id=doc_id,
-            uri=s3_result["uri"],
             filename=filename,
             doc_hash=doc_hash,
             metadata=metadata,
             source_path=source_path,
             source_modified_at=source_modified_at,
-            size_bytes=content_size,
-            text_length=len(text),
-            content_type=file_ext
+            last_ingest_job_id=None,
+            replace_doc_id=replace_doc_id,
+            progress_cb=_progress_cb,
         )
-        
-        # Ajouter les entités et relations
-        graph_result = await get_graph().add_entities_and_relations(
-            memory_id=memory_id,
-            doc_id=doc_id,
-            extraction=extraction
-        )
-        
-        # === RAG Vectoriel : Chunking + Embedding + Qdrant (synchrone strict) ===
-        await _log("🧩 Vectorisation RAG (chunking + embedding + Qdrant)...")
-        chunks_stored = 0
-        EMBED_BATCH_SIZE = 5  # Envoyer max 5 chunks par appel API embedding
-        try:
-            # S'assurer que la collection Qdrant existe
-            await get_vector_store().ensure_collection(memory_id)
-            await _log("🧩 Collection Qdrant prête")
-            sys.stderr.flush()
-            
-            # Si force, supprimer les anciens chunks Qdrant
-            if existing and force:
-                await get_vector_store().delete_document_chunks(memory_id, existing.id)
-                await _log("🧩 Anciens chunks supprimés")
-                sys.stderr.flush()
-            
-            # Chunker le texte (CPU-bound → thread pool pour ne pas bloquer l'event loop)
-            await _log("🧩 Chunking sémantique en cours...")
-            sys.stderr.flush()
-            import asyncio
-            loop = asyncio.get_event_loop()
-            chunks = await loop.run_in_executor(None, get_chunker().chunk_document, text, filename)
-            await _log(f"🧩 Chunking terminé: {len(chunks)} chunks créés")
-            sys.stderr.flush()
-            
-            if chunks:
-                # Enrichir chaque chunk avec doc_id et memory_id
-                for chunk in chunks:
-                    chunk.doc_id = doc_id
-                    chunk.memory_id = memory_id
-                
-                # Générer les embeddings par BATCHES (évite surcharge API)
-                chunk_texts = [c.text for c in chunks]
-                total_chunks = len(chunk_texts)
-                all_embeddings = []
-                
-                for batch_start in range(0, total_chunks, EMBED_BATCH_SIZE):
-                    batch_end = min(batch_start + EMBED_BATCH_SIZE, total_chunks)
-                    batch_num = batch_start // EMBED_BATCH_SIZE + 1
-                    total_batches = (total_chunks + EMBED_BATCH_SIZE - 1) // EMBED_BATCH_SIZE
-                    batch_texts = chunk_texts[batch_start:batch_end]
-                    
-                    await _log(f"🔢 Embedding batch {batch_num}/{total_batches} ({len(batch_texts)} chunks)")
-                    sys.stderr.flush()
-                    
-                    try:
-                        batch_embeddings = await get_embedder().embed_texts(batch_texts)
-                        all_embeddings.extend(batch_embeddings)
-                        await _log(f"✅ Batch {batch_num}/{total_batches} OK ({len(all_embeddings)}/{total_chunks})")
-                        sys.stderr.flush()
-                    except Exception as embed_err:
-                        print(f"❌ [Ingest] Erreur embedding batch {batch_num}: {embed_err}", file=sys.stderr)
-                        sys.stderr.flush()
-                        raise
-                
-                # Stocker dans Qdrant
-                await _log(f"📦 Stockage Qdrant ({len(all_embeddings)} vecteurs)...")
-                sys.stderr.flush()
-                chunks_stored = await get_vector_store().store_chunks(
-                    memory_id=memory_id,
-                    doc_id=doc_id,
-                    filename=filename,
-                    chunks=chunks,
-                    embeddings=all_embeddings
-                )
-                
-                await _log(f"✅ RAG: {chunks_stored} chunks vectorisés")
-                sys.stderr.flush()
-        except Exception as e:
-            # Couplage strict : si Qdrant échoue, on fait échouer l'ingestion
-            print(f"❌ [Ingest] Erreur RAG vectoriel: {e}", file=sys.stderr)
-            sys.stderr.flush()
-            raise RuntimeError(f"Échec vectorisation Qdrant (couplage strict): {e}")
-        
-        # Compter les types de relations
-        from collections import Counter
-        relation_types = Counter(r.type for r in extraction.relations)
-        entity_types = Counter(e.type for e in extraction.entities)
-        
-        _elapsed = round(_time.monotonic() - _t0, 1)
-        await _log(f"🏁 Ingestion terminée en {_elapsed}s")
-        
-        return {
-            "status": "ok",
-            "document_id": doc_id,
-            "filename": filename,
-            "s3_uri": s3_result["uri"],
-            "size_bytes": s3_result["size_bytes"],
-            "entities_extracted": len(extraction.entities),
-            "relations_extracted": len(extraction.relations),
-            "entities_created": graph_result.get("entities_created", 0),
-            "entities_merged": graph_result.get("entities_merged", 0),
-            "relations_created": graph_result.get("relations_created", 0),
-            "relations_merged": graph_result.get("relations_merged", 0),
-            "entity_types": dict(entity_types),
-            "relation_types": dict(relation_types),
-            "chunks_stored": chunks_stored,
-            "summary": extraction.summary,
-            "key_topics": extraction.key_topics,
-            "steps": _steps_log,
-            "elapsed_seconds": _elapsed,
-        }
-        
+
     except Exception as e:
         print(f"❌ [Ingest] Erreur: {e}", file=sys.stderr)
         return {"status": "error", "message": str(e)}
@@ -815,6 +615,267 @@ def _extract_text(content: bytes, filename: str) -> Optional[str]:
     except Exception as e:
         print(f"⚠️ [Extract] Erreur extraction texte ({ext}): {e}", file=sys.stderr)
         return None
+
+
+# =============================================================================
+# OUTILS MCP - Ingestion asynchrone
+# =============================================================================
+
+@mcp.tool()
+async def memory_ingest_async(
+    memory_id: Annotated[str, Field(description="ID de la mémoire cible")],
+    content_base64: Annotated[str, Field(description="Contenu du document encodé en base64")],
+    filename: Annotated[str, Field(description="Nom du fichier (ex: 'contrat.pdf', 'notes.md')")],
+    source_path: Annotated[str, Field(description="Chemin source — CLÉ MÉTIER STABLE (ex: 'legal/contracts/CGA.pdf'). Obligatoire.")],
+    sha256: Annotated[str, Field(description="Checksum SHA-256 (hex) du contenu décodé. Obligatoire (contrôle d'intégrité + détection de changement).")],
+    metadata: Annotated[Optional[Dict[str, Any]], Field(default=None, description="Métadonnées additionnelles")] = None,
+    source_modified_at: Annotated[Optional[str], Field(default=None, description="Date de modification source ISO 8601")] = None,
+    job_id: Annotated[Optional[str], Field(default=None, description="ID de job optionnel (idempotence client). Généré si absent.")] = None,
+    replace_existing: Annotated[bool, Field(default=False, description="Si true, remplace explicitement un document existant dont le checksum a changé. Défaut: false (renvoie changed_skipped).")] = False,
+) -> dict:
+    """
+    Soumet un document à l'ingestion ASYNCHRONE et rend la main immédiatement.
+
+    L'extraction LLM + embeddings se déroulent en tâche de fond (un worker par
+    mémoire). Suivi via `ingest_job_status`, listing via `ingest_job_list`,
+    annulation via `ingest_job_cancel`.
+
+    Idempotence par `source_path` (clé métier) + `sha256` (détecteur de changement) :
+    - source_path + checksum déjà ingérés avec succès → `skipped` (immédiat, sans job)
+    - checksum différent + replace_existing=false → `changed_skipped` (immédiat)
+    - checksum différent + replace_existing=true → remplacement propre
+    - nouveau → `queued`/`running`
+
+    Returns:
+        {job_id?, status, document_id?, message} — réponse immédiate.
+    """
+    try:
+        validate_memory_id(memory_id)
+        filename = validate_filename(filename)
+
+        access_err = check_memory_access(memory_id)
+        if access_err:
+            return access_err
+        write_err = check_write_permission()
+        if write_err:
+            return write_err
+
+        if not source_path or not source_path.strip():
+            return {"status": "error", "message": "source_path est obligatoire (clé métier stable)."}
+        if not sha256 or not sha256.strip():
+            return {"status": "error", "message": "sha256 est obligatoire (checksum du contenu)."}
+
+        content = base64.b64decode(content_base64)
+        del content_base64
+        validate_document_size(content, settings.max_document_size_bytes)
+
+        # Garde d'intégrité : le checksum fourni doit correspondre au contenu reçu
+        computed = get_storage().compute_hash(content)
+        provided = sha256.strip().lower()
+        if computed.lower() != provided:
+            return {
+                "status": "error",
+                "message": f"Checksum invalide : sha256 fourni ({provided[:12]}…) ≠ contenu reçu ({computed[:12]}…).",
+            }
+
+        requested_by = ""
+        try:
+            auth = current_auth.get()
+            requested_by = getattr(auth, "client_name", "") or getattr(auth, "name", "") or ""
+        except Exception:
+            pass
+
+        from .core.ingest_queue import get_ingest_queue
+        return await get_ingest_queue().submit(
+            memory_id=memory_id,
+            content=content,
+            filename=filename,
+            sha256=computed,
+            source_path=source_path,
+            replace_existing=replace_existing,
+            metadata=metadata,
+            source_modified_at=source_modified_at,
+            requested_by=requested_by,
+            job_id=job_id,
+        )
+    except Exception as e:
+        print(f"❌ [IngestAsync] Erreur: {e}", file=sys.stderr)
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def memory_ingest_batch_async(
+    memory_id: Annotated[str, Field(description="ID de la mémoire cible")],
+    documents: Annotated[List[Dict[str, Any]], Field(description="Liste de documents : chaque entrée {content_base64, filename, source_path, sha256, metadata?, source_modified_at?}")],
+    replace_existing: Annotated[bool, Field(default=False, description="Remplacement explicite si checksum différent (s'applique à tout le lot)")] = False,
+) -> dict:
+    """
+    Soumet un LOT de documents à l'ingestion asynchrone.
+
+    Chaque document est résolu indépendamment (source_path + sha256) puis mis en
+    file. Un `batch_id` commun permet de suivre l'avancement agrégé via ce même
+    outil (réappel) ou `ingest_job_list(memory_id, ...)`.
+
+    Returns:
+        {batch_id, total, counts{queued/running/succeeded/failed/skipped/...},
+         errors[], items[]}
+    """
+    try:
+        validate_memory_id(memory_id)
+        access_err = check_memory_access(memory_id)
+        if access_err:
+            return access_err
+        write_err = check_write_permission()
+        if write_err:
+            return write_err
+
+        if not documents:
+            return {"status": "error", "message": "Aucun document fourni."}
+
+        requested_by = ""
+        try:
+            auth = current_auth.get()
+            requested_by = getattr(auth, "client_name", "") or getattr(auth, "name", "") or ""
+        except Exception:
+            pass
+
+        import uuid as _uuid
+        batch_id = f"batch_{_uuid.uuid4().hex}"
+
+        from .core.ingest_queue import get_ingest_queue
+        queue = get_ingest_queue()
+
+        items = []
+        counts = {k: 0 for k in ("queued", "running", "succeeded", "failed", "skipped", "changed_skipped", "error", "queue_full")}
+        errors = []
+
+        for idx, doc in enumerate(documents):
+            try:
+                fname = validate_filename(doc.get("filename", ""))
+                sp = doc.get("source_path", "")
+                sha = (doc.get("sha256") or "").strip()
+                cb64 = doc.get("content_base64", "")
+                if not sp or not sha or not cb64:
+                    raise ValueError("content_base64, filename, source_path et sha256 sont requis par document")
+
+                content = base64.b64decode(cb64)
+                validate_document_size(content, settings.max_document_size_bytes)
+                computed = get_storage().compute_hash(content)
+                if computed.lower() != sha.lower():
+                    raise ValueError(f"checksum invalide pour {fname}")
+
+                res = await queue.submit(
+                    memory_id=memory_id,
+                    content=content,
+                    filename=fname,
+                    sha256=computed,
+                    source_path=sp,
+                    replace_existing=replace_existing,
+                    metadata=doc.get("metadata"),
+                    source_modified_at=doc.get("source_modified_at"),
+                    requested_by=requested_by,
+                    batch_id=batch_id,
+                )
+            except Exception as item_err:
+                res = {"status": "error", "message": str(item_err), "source_path": doc.get("source_path")}
+                errors.append({"source_path": doc.get("source_path"), "filename": doc.get("filename"), "error": str(item_err)})
+
+            st = res.get("status", "error")
+            counts[st] = counts.get(st, 0) + 1
+            items.append({"index": idx, "source_path": doc.get("source_path"), "job_id": res.get("job_id"), "status": st})
+
+        return {
+            "status": "ok",
+            "batch_id": batch_id,
+            "memory_id": memory_id,
+            "total": len(documents),
+            "counts": counts,
+            "errors": errors,
+            "items": items,
+            "message": "Lot soumis. Suivi par batch_id via ingest_job_list ou réappel.",
+        }
+    except Exception as e:
+        print(f"❌ [IngestBatchAsync] Erreur: {e}", file=sys.stderr)
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def ingest_job_status(
+    job_id: Annotated[str, Field(description="ID du job retourné par memory_ingest_async")]
+) -> dict:
+    """
+    Consulte l'état d'un job d'ingestion asynchrone.
+
+    Returns:
+        status, current_step, progress_percent, created_entities,
+        created_relations, started_at/updated_at/finished_at, error éventuelle.
+    """
+    try:
+        from .core.ingest_queue import get_ingest_queue
+        result = await get_ingest_queue().get_job(job_id)
+        # Contrôle d'accès si le job est connu
+        mem = result.get("memory_id")
+        if mem:
+            access_err = check_memory_access(mem)
+            if access_err:
+                return access_err
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def ingest_job_list(
+    memory_id: Annotated[str, Field(description="ID de la mémoire")],
+    status: Annotated[Optional[str], Field(default=None, description="Filtre par statut (queued|running|succeeded|failed|cancelled|skipped|changed_skipped)")] = None,
+    source_path: Annotated[Optional[str], Field(default=None, description="Filtre par source_path (reprise après timeout client)")] = None,
+    batch_id: Annotated[Optional[str], Field(default=None, description="Filtre par batch_id")] = None,
+) -> dict:
+    """
+    Liste les jobs d'ingestion d'une mémoire (reprise après timeout client).
+
+    Permet de retrouver un job par `source_path` après une coupure réseau.
+    Note : l'historique des jobs est in-memory best-effort (perdu au redémarrage
+    du conteneur) ; l'état d'ingestion durable reste lisible via `document_list`.
+    """
+    try:
+        validate_memory_id(memory_id)
+        access_err = check_memory_access(memory_id)
+        if access_err:
+            return access_err
+        from .core.ingest_queue import get_ingest_queue
+        return await get_ingest_queue().list_jobs(memory_id, status=status, source_path=source_path, batch_id=batch_id)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def ingest_job_cancel(
+    job_id: Annotated[str, Field(description="ID du job à annuler")]
+) -> dict:
+    """
+    Annule un job d'ingestion (best-effort, sans corrompre le graphe).
+
+    - Job en attente : retiré immédiatement de la file (`cancelled`).
+    - Job en cours : annulation coopérative à la prochaine frontière de phase ;
+      les écritures partielles sont nettoyées (aucun orphelin).
+    """
+    try:
+        from .core.ingest_queue import get_ingest_queue
+        queue = get_ingest_queue()
+        # Contrôle d'accès via la mémoire du job
+        info = await queue.get_job(job_id)
+        mem = info.get("memory_id")
+        if mem:
+            access_err = check_memory_access(mem)
+            if access_err:
+                return access_err
+            write_err = check_write_permission()
+            if write_err:
+                return write_err
+        return await queue.cancel(job_id)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 # =============================================================================
@@ -1788,40 +1849,26 @@ async def document_delete(
         if access_err:
             return access_err
         
-        # 1. Récupérer l'URI S3 avant suppression du graphe
-        doc_info = await get_graph().get_document(memory_id, document_id)
-        s3_deleted = False
-        
-        if doc_info and doc_info.get("uri"):
-            # 2. Supprimer le fichier S3
-            try:
-                s3_deleted = await get_storage().delete_document(memory_id, doc_info["uri"])
-                print(f"🗑️ [S3] Fichier supprimé: {doc_info['uri']}", file=sys.stderr)
-            except Exception as e:
-                print(f"⚠️ [S3] Erreur suppression S3 pour {doc_info['uri']}: {e}", file=sys.stderr)
-        
-        # 2b. Supprimer les chunks Qdrant (couplage strict)
-        qdrant_chunks_deleted = 0
-        try:
-            qdrant_chunks_deleted = await get_vector_store().delete_document_chunks(memory_id, document_id)
-        except Exception as e:
-            print(f"❌ [Qdrant] Erreur suppression chunks pour doc {document_id}: {e}", file=sys.stderr)
-            raise RuntimeError(f"Impossible de supprimer les chunks Qdrant (couplage strict): {e}")
-        
-        # 3. Supprimer du graphe Neo4j
-        result = await get_graph().delete_document(memory_id, document_id)
-        
-        if result.get("deleted"):
+        # Suppression multi-backend ordonnée (Qdrant → Neo4j → S3), compensable
+        from .core.ingest_pipeline import delete_document_everywhere
+        result = await delete_document_everywhere(memory_id, document_id)
+        errors = result.get("errors", [])
+
+        if result.get("neo4j_deleted"):
+            # Si un backend a échoué (Qdrant/S3), le signaler explicitement à l'appelant
             return {
-                "status": "deleted",
+                "status": "partial_deleted" if errors else "deleted",
                 "document_id": document_id,
                 "relations_deleted": result.get("relations_deleted", 0),
                 "entities_deleted": result.get("entities_deleted", 0),
-                "qdrant_chunks_deleted": qdrant_chunks_deleted,
-                "s3_deleted": s3_deleted
+                "qdrant_chunks_deleted": result.get("qdrant_chunks_deleted", 0),
+                "s3_deleted": result.get("s3_deleted", False),
+                "errors": errors,
+                "message": ("Document supprimé mais nettoyage incomplet (voir errors)"
+                            if errors else "Document supprimé"),
             }
-        return {"status": "error", "message": "Document non trouvé"}
-        
+        return {"status": "error", "message": "Document non trouvé ou suppression Neo4j échouée", "errors": errors}
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -2242,11 +2289,78 @@ async def storage_check(
             return f"{size_bytes:.1f} TB"
         
         orphan_total_size = sum(o["size"] for o in orphans)
-        
+
+        # 4b. Cohérence multi-backend (Qdrant + doublons source_path + ingestions partielles)
+        duplicate_source_paths = []   # [{memory_id, source_path, doc_ids}]
+        partial_ingestions = []       # [{memory_id, doc_id, source_path, ingestion_status}]
+        qdrant_orphan_vectors = []    # [{memory_id, doc_id}] : chunks Qdrant sans Document Neo4j
+        qdrant_missing_chunks = []    # [{memory_id, doc_id, source_path}] : doc succeeded mais chunks ≠
+        qdrant_errors = []            # [{memory_id, error}] : check Qdrant incomplet (panne transitoire)
+        for mem in memories:
+            mid = mem.id
+            mem_graph = await get_graph().get_full_graph(mid)
+            docs = mem_graph.get("documents", [])
+            neo4j_doc_ids = {d.get("id") for d in docs if d.get("id")}
+
+            # Doublons source_path
+            by_sp = {}
+            for d in docs:
+                sp = d.get("source_path")
+                if sp:
+                    by_sp.setdefault(sp, []).append(d.get("id"))
+            for sp, ids in by_sp.items():
+                if len(ids) > 1:
+                    duplicate_source_paths.append({"memory_id": mid, "source_path": sp, "doc_ids": ids})
+
+            # Ingestions partielles (statut durable ni succeeded ni legacy)
+            for d in docs:
+                st = d.get("ingestion_status")
+                if st in ("running", "failed", "cleanup_pending"):
+                    partial_ingestions.append({
+                        "memory_id": mid, "doc_id": d.get("id"),
+                        "source_path": d.get("source_path"), "ingestion_status": st,
+                    })
+
+            # Qdrant : vecteurs orphelins + chunks manquants/partiels
+            try:
+                qdrant_doc_ids = await get_vector_store().list_doc_ids(mid)
+                for did in qdrant_doc_ids - neo4j_doc_ids:
+                    qdrant_orphan_vectors.append({"memory_id": mid, "doc_id": did})
+                for d in docs:
+                    expected = d.get("chunk_count") or 0
+                    if d.get("ingestion_status") == "succeeded" and expected > 0:
+                        # Comparer le compte RÉEL de vecteurs Qdrant à chunk_count (détecte le partiel)
+                        actual = await get_vector_store().count_document_chunks(mid, d.get("id"))
+                        if actual != expected:
+                            qdrant_missing_chunks.append({
+                                "memory_id": mid, "doc_id": d.get("id"),
+                                "source_path": d.get("source_path"),
+                                "expected_chunks": expected, "actual_chunks": actual,
+                            })
+            except Exception as e:
+                # Ne PAS prétendre "0 incohérence" : on signale que le check Qdrant
+                # de cette mémoire est incomplet (le client doit en tenir compte).
+                print(f"⚠️ [storage_check] Qdrant incomplet pour {mid}: {e}", file=sys.stderr)
+                qdrant_errors.append({"memory_id": mid, "error": str(e)})
+
+        consistency_issues = (
+            len(duplicate_source_paths) + len(partial_ingestions)
+            + len(qdrant_orphan_vectors) + len(qdrant_missing_chunks)
+        )
+
         report = {
             "status": "ok",
             "scope": memory_id or "all",
             "memories_checked": len(memories),
+            "consistency": {
+                "issues": consistency_issues,
+                "complete": len(qdrant_errors) == 0,
+                "duplicate_source_paths": duplicate_source_paths,
+                "partial_ingestions": partial_ingestions,
+                "qdrant_orphan_vectors": qdrant_orphan_vectors,
+                "qdrant_missing_chunks": qdrant_missing_chunks,
+                "qdrant_errors": qdrant_errors,
+            },
             "graph_documents": {
                 "total": check_result["total"],
                 "accessible": check_result["accessible"],
@@ -2267,6 +2381,8 @@ async def storage_check(
                 f"✅ {check_result['accessible']}/{check_result['total']} docs accessibles"
                 + (f", ❌ {check_result['missing']} manquants" if check_result['missing'] > 0 else "")
                 + (f", ⚠️ {len(orphans)} orphelins S3 ({_human_size(orphan_total_size)})" if orphans else "")
+                + (f", 🔗 {consistency_issues} incohérence(s) (Qdrant/source_path/partiels)" if consistency_issues else "")
+                + (f", ⚠️ check Qdrant incomplet sur {len(qdrant_errors)} mémoire(s)" if qdrant_errors else "")
             )
         }
         
@@ -2433,6 +2549,7 @@ async def system_about() -> dict:
         tools_categories = {
             "Gestion mémoires": ["memory_create", "memory_update", "memory_delete", "memory_list", "memory_stats"],
             "Ingestion": ["memory_ingest"],
+            "Ingestion asynchrone": ["memory_ingest_async", "memory_ingest_batch_async", "ingest_job_status", "ingest_job_list", "ingest_job_cancel"],
             "Recherche & Q&A": ["memory_search", "memory_query", "memory_get_context", "question_answer"],
             "Documents": ["document_list", "document_get", "document_delete"],
             "Ontologies": ["ontology_list", "ontology_get", "ontology_export", "ontology_import", "ontology_update", "ontology_delete"],

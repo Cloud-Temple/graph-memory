@@ -51,7 +51,8 @@ class GraphService:
         )
         self._database = settings.neo4j_database
         self._fulltext_index_ready = False  # Lazy init de l'index fulltext
-    
+        self._doc_constraints_ready = False  # Lazy init contrainte unicité source_path
+
     async def close(self):
         """Ferme la connexion Neo4j."""
         await self._driver.close()
@@ -325,6 +326,53 @@ class GraphService:
     # Gestion des Documents
     # =========================================================================
     
+    @staticmethod
+    def normalize_source_path(source_path: Optional[str]) -> Optional[str]:
+        """
+        Normalise un source_path pour servir de clé métier stable.
+
+        - None / chaîne vide → None (pas de clé source_path)
+        - sinon : strip + suppression des slashes de tête redondants
+        """
+        if not source_path:
+            return None
+        normalized = source_path.strip().lstrip("/")
+        return normalized or None
+
+    async def ensure_document_constraints(self):
+        """
+        Crée la contrainte d'unicité (memory_id, source_path) sur les documents.
+
+        Idempotent et best-effort : si des doublons legacy existent déjà, la
+        création de contrainte échoue → on log un avertissement sans planter
+        (la sérialisation par worker/mémoire garantit déjà l'unicité applicative).
+
+        Normalise au passage les anciens source_path == "" en null pour ne pas
+        faire échouer la contrainte (Neo4j ignore les propriétés null).
+        """
+        try:
+            async with self.session() as session:
+                # Migration : "" → null (sinon tous les docs legacy violent l'unicité)
+                await session.run(
+                    """
+                    MATCH (d:Document) WHERE d.source_path = ''
+                    SET d.source_path = null
+                    """
+                )
+                await session.run(
+                    """
+                    CREATE CONSTRAINT document_source_path_unique IF NOT EXISTS
+                    FOR (d:Document) REQUIRE (d.memory_id, d.source_path) IS UNIQUE
+                    """
+                )
+                self._doc_constraints_ready = True
+                print("🔒 [Graph] Contrainte d'unicité (memory_id, source_path) créée/vérifiée", file=sys.stderr)
+        except Exception as e:
+            # NE PAS marquer _doc_constraints_ready : on retentera au prochain add_document.
+            print(f"⚠️ [Graph] Contrainte source_path NON créée (doublons legacy à résoudre ?): {e}", file=sys.stderr)
+            print("   ⚠️ L'unicité n'est PAS garantie par la base tant que la contrainte n'existe pas.", file=sys.stderr)
+            print("   → Résoudre les doublons (memory_id, source_path) puis relancer pour activer la contrainte.", file=sys.stderr)
+
     async def add_document(
         self,
         memory_id: str,
@@ -338,10 +386,13 @@ class GraphService:
         size_bytes: int = 0,
         text_length: int = 0,
         content_type: str = "",
+        ingestion_status: str = "running",
+        last_ingest_job_id: Optional[str] = None,
+        chunk_count: int = 0,
     ) -> Document:
         """
         Ajoute un document au graphe avec métadonnées enrichies.
-        
+
         Args:
             memory_id: ID de la mémoire
             doc_id: UUID du document
@@ -354,13 +405,23 @@ class GraphService:
             size_bytes: Taille du fichier en bytes
             text_length: Longueur du texte extrait en caractères
             content_type: Extension/type du fichier (ex: "pdf", "docx")
+            ingestion_status: État d'ingestion durable ("running" → "succeeded" après Qdrant)
+            last_ingest_job_id: ID du job d'ingestion asynchrone (None pour l'ingestion synchrone)
+            chunk_count: Nombre de chunks vectorisés (finalisé après Qdrant)
         """
         import json
-        
+
+        # Garantir la contrainte d'unicité (memory_id, source_path) — couvre les
+        # DEUX chemins (memory_ingest synchrone ET ingestion asynchrone).
+        if not self._doc_constraints_ready:
+            await self.ensure_document_constraints()
+
         async with self.session() as session:
             # Neo4j n'accepte que les types primitifs, convertir metadata en JSON string
             metadata_json = json.dumps(metadata) if metadata else "{}"
-            
+            # source_path normalisé : null si absent (compatibilité contrainte d'unicité)
+            norm_source_path = self.normalize_source_path(source_path)
+
             result = await session.run(
                 """
                 CREATE (d:Document {
@@ -371,12 +432,15 @@ class GraphService:
                     hash: $hash,
                     ingested_at: datetime(),
                     metadata_json: $metadata_json,
-                    source_path: $source_path,
                     source_modified_at: $source_modified_at,
                     size_bytes: $size_bytes,
                     text_length: $text_length,
-                    content_type: $content_type
+                    content_type: $content_type,
+                    ingestion_status: $ingestion_status,
+                    last_ingest_job_id: $last_ingest_job_id,
+                    chunk_count: $chunk_count
                 })
+                SET d.source_path = $source_path
                 RETURN d
                 """,
                 doc_id=doc_id,
@@ -385,18 +449,21 @@ class GraphService:
                 filename=filename,
                 hash=doc_hash,
                 metadata_json=metadata_json,
-                source_path=source_path or "",
+                source_path=norm_source_path,
                 source_modified_at=source_modified_at or "",
                 size_bytes=size_bytes,
                 text_length=text_length,
-                content_type=content_type
+                content_type=content_type,
+                ingestion_status=ingestion_status,
+                last_ingest_job_id=last_ingest_job_id,
+                chunk_count=chunk_count,
             )
-            
+
             record = await result.single()
             node = record["d"]
-            
-            print(f"📄 [Graph] Document ajouté: {filename} ({doc_id})", file=sys.stderr)
-            
+
+            print(f"📄 [Graph] Document ajouté: {filename} ({doc_id}) [status={ingestion_status}]", file=sys.stderr)
+
             return Document(
                 id=doc_id,
                 memory_id=memory_id,
@@ -409,6 +476,80 @@ class GraphService:
                     custom=metadata or {}
                 )
             )
+
+    async def update_document_ingestion(
+        self,
+        memory_id: str,
+        doc_id: str,
+        ingestion_status: str,
+        chunk_count: Optional[int] = None,
+        last_ingest_job_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Met à jour l'état d'ingestion durable d'un document.
+
+        Appelé en fin de pipeline pour marquer `ingestion_status = "succeeded"`
+        UNIQUEMENT après succès de toutes les étapes (Neo4j + Qdrant). C'est ce
+        marqueur durable qui empêche un faux `skipped` sur ingestion partielle.
+        """
+        async with self.session() as session:
+            result = await session.run(
+                """
+                MATCH (d:Document {id: $doc_id, memory_id: $memory_id})
+                SET d.ingestion_status = $ingestion_status
+                SET d.chunk_count = CASE WHEN $chunk_count IS NULL THEN d.chunk_count ELSE $chunk_count END
+                SET d.last_ingest_job_id = CASE WHEN $last_ingest_job_id IS NULL THEN d.last_ingest_job_id ELSE $last_ingest_job_id END
+                RETURN count(d) as updated
+                """,
+                doc_id=doc_id,
+                memory_id=memory_id,
+                ingestion_status=ingestion_status,
+                chunk_count=chunk_count,
+                last_ingest_job_id=last_ingest_job_id,
+            )
+            record = await result.single()
+            return bool(record and record["updated"] > 0)
+
+    async def get_document_by_source_path(self, memory_id: str, source_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Trouve un document par son source_path (clé métier stable).
+
+        Retourne un dict avec hash, ingestion_status et last_ingest_job_id pour
+        permettre la logique d'idempotence (skipped / changed / replace).
+        """
+        norm = self.normalize_source_path(source_path)
+        if not norm:
+            return None
+        async with self.session() as session:
+            result = await session.run(
+                """
+                MATCH (d:Document {memory_id: $memory_id, source_path: $source_path})
+                RETURN d.id as id, d.filename as filename, d.uri as uri,
+                       d.hash as hash, d.ingested_at as ingested_at,
+                       d.source_path as source_path,
+                       d.ingestion_status as ingestion_status,
+                       d.last_ingest_job_id as last_ingest_job_id,
+                       d.chunk_count as chunk_count
+                ORDER BY d.ingested_at DESC
+                LIMIT 1
+                """,
+                memory_id=memory_id,
+                source_path=norm,
+            )
+            record = await result.single()
+            if not record:
+                return None
+            return {
+                "id": record["id"],
+                "filename": record["filename"],
+                "uri": record["uri"],
+                "hash": record["hash"],
+                "ingested_at": record["ingested_at"].isoformat() if record["ingested_at"] else None,
+                "source_path": record["source_path"],
+                "ingestion_status": record["ingestion_status"] or "unknown",
+                "last_ingest_job_id": record["last_ingest_job_id"],
+                "chunk_count": record["chunk_count"] or 0,
+            }
     
     async def get_document_by_hash(self, memory_id: str, doc_hash: str) -> Optional[Document]:
         """Trouve un document par son hash."""
@@ -1043,18 +1184,21 @@ class GraphService:
             docs_result = await session.run(
                 """
                 MATCH (d:Document {memory_id: $memory_id})
-                RETURN d.id as id, d.filename as filename, d.uri as uri, 
+                RETURN d.id as id, d.filename as filename, d.uri as uri,
                        d.hash as hash, d.ingested_at as ingested_at,
                        d.source_path as source_path,
                        d.source_modified_at as source_modified_at,
                        d.size_bytes as size_bytes,
                        d.text_length as text_length,
-                       d.content_type as content_type
+                       d.content_type as content_type,
+                       d.ingestion_status as ingestion_status,
+                       d.last_ingest_job_id as last_ingest_job_id,
+                       d.chunk_count as chunk_count
                 ORDER BY d.ingested_at DESC
                 """,
                 memory_id=memory_id
             )
-            
+
             documents = []
             doc_ids = set()
             async for record in docs_result:
@@ -1064,7 +1208,11 @@ class GraphService:
                     "filename": record["filename"],
                     "uri": record["uri"],  # URI S3 pour récupérer le fichier
                     "hash": record["hash"],
+                    "sha256": record["hash"],  # alias explicite (checksum métier)
                     "ingested_at": record["ingested_at"].isoformat() if record["ingested_at"] else None,
+                    "ingestion_status": record.get("ingestion_status") or "unknown",
+                    "last_ingest_job_id": record.get("last_ingest_job_id"),
+                    "chunk_count": record.get("chunk_count") or 0,
                 }
                 # Ajouter les métadonnées enrichies si présentes
                 source_path = record.get("source_path")

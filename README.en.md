@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.0.0).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.1.0).
 
-**Latest**: v3.0.0 (June 3, 2026) — Web `/admin` console aligned with Live Memory, HttpOnly cookie web authentication, MCP tool proxy, browser file ingestion, and new `cloud-service-management` ontology.
+**Latest**: v3.1.0 (June 3, 2026) — Asynchronous, idempotent and observable ingestion: 5 new MCP tools (`memory_ingest_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel`, `memory_ingest_batch_async`), idempotency by `source_path` + `sha256`, durable ingestion marker, and consistent multi-backend deletion.
 
 ---
 
@@ -187,12 +187,13 @@ async def example():
 
 ---
 
-## 🔧 MCP Tools (35)
+## 🔧 MCP Tools (40)
 
 | Category           | Tools                                                                                                          |
 | ------------------ | -------------------------------------------------------------------------------------------------------------- |
 | **Memory CRUD**    | `memory_create`, `memory_update`, `memory_delete`, `memory_list`, `memory_stats`                               |
 | **Ingestion**      | `memory_ingest`                                                                                                |
+| **Async ingestion** | `memory_ingest_async`, `memory_ingest_batch_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel` |
 | **Search & Q&A**   | `memory_search`, `memory_query`, `memory_get_context`, `question_answer`                                       |
 | **Documents**      | `document_list`, `document_get`, `document_delete`                                                             |
 | **Backup/Restore** | `backup_create`, `backup_list`, `backup_restore`, `backup_download`, `backup_delete`, `backup_restore_archive` |

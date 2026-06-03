@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.1.0] - 2026-06-03
+
+### ⚡ Ingestion asynchrone, idempotente et observable
+
+Release introduisant une API d'ingestion **asynchrone** : le client soumet un document (ou un lot) et récupère immédiatement la main, l'extraction LLM + embeddings se déroulant en tâche de fond côté serveur. Design de référence : `DESIGN/INGESTION_ASYNCHRONE.md`.
+
+- **5 nouveaux outils MCP** :
+  - `memory_ingest_async` — soumission d'un job (réponse immédiate `queued`/`running`/`skipped`/`changed_skipped`), `source_path` et `sha256` obligatoires
+  - `ingest_job_status` — suivi d'un job (statut, étape courante, progression %, entités/relations créées, timestamps, erreur)
+  - `ingest_job_list` — listing des jobs d'une mémoire (reprise après timeout client, filtres `status`/`source_path`)
+  - `ingest_job_cancel` — annulation best-effort sans corrompre le graphe
+  - `memory_ingest_batch_async` — soumission d'un lot avec `batch_id` et agrégat (total/queued/running/succeeded/failed/skipped + documents en erreur)
+- **Idempotence documentaire par `source_path`** : `source_path` devient la clé métier stable, `sha256` détecte les changements. Même `source_path` + même checksum + ingestion réussie → `skipped` ; checksum différent → remplacement explicite (`replace_existing=true`) sinon `changed_skipped`. Contrainte d'unicité Neo4j `(memory_id, source_path)`.
+- **Marqueur d'ingestion durable** sur le nœud `Document` (`ingestion_status`, `last_ingest_job_id`, `sha256`, `ingested_at`, `chunk_count`) : `skipped` n'est renvoyé que si `ingestion_status == succeeded` (évite le faux skipped sur ingestion partielle).
+- **Suppression multi-backend cohérente** : nouveau `delete_document_everywhere()` (Qdrant → Neo4j → S3, compensable ; S3 en dernier pour ne pas créer d'orphelin) utilisé par le remplacement et l'annulation, garantissant zéro orphelin.
+- **Queue in-memory best-effort** : un worker `asyncio` par `memory_id` (sérialise les écritures Neo4j/Qdrant), quotas anti-saturation, coalescing des jobs redondants.
+- **`document_list` enrichi** : expose `source_path`, `sha256`, `ingestion_status`, `ingested_at` et `last_ingest_job_id`.
+- **CLI alignée (3 couches)** : commandes `ingest-async`, `job-status`, `job-list`, `job-cancel`, `ingest-batch-async` (Click + shell interactif) avec option `--watch`.
+- **40 outils MCP** (35 → 40), nouvelle catégorie « Ingestion asynchrone » dans `system_about`.
+
 ## [3.0.0] - 2026-06-03
 
 ### 🖥️ Console web d'administration Graph Memory

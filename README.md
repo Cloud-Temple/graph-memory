@@ -66,9 +66,9 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.0.0).
+Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.1.0).
 
-**Dernière version** : v3.0.0 (3 juin 2026) — Console web `/admin` alignée sur Live Memory, authentification web par cookie HttpOnly, proxy d'outils MCP, ingestion fichier depuis l'admin et nouvelle ontologie `cloud-service-management`.
+**Dernière version** : v3.1.0 (3 juin 2026) — Ingestion asynchrone, idempotente et observable : 5 nouveaux outils MCP (`memory_ingest_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel`, `memory_ingest_batch_async`), idempotence par `source_path` + `sha256`, marqueur d'ingestion durable et suppression multi-backend cohérente.
 
 ---
 
@@ -189,15 +189,16 @@ Question en langage naturel
 │  │  • AuthMiddleware (Bearer Token)                               │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools (35 outils)                                         │  │
+│  │  MCP Tools (40 outils)                                         │  │
 │  │  • memory_create/delete/list/stats                             │  │
 │  │  • memory_ingest/search/get_context                            │  │
+│  │  • memory_ingest_async/batch_async + ingest_job_status/list/cancel │
 │  │  • question_answer / memory_query                              │  │
 │  │  • document_list/get/delete                                    │  │
 │  │  • backup_create/list/restore/download/delete/restore_archive  │  │
 │  │  • storage_check/storage_cleanup                               │  │
 │  │  • admin_create_token/list_tokens/revoke_token/update_token    │  │
-│  │  • ontology_list • system_health                               │  │
+│  │  • ontology_list/get/export/import/update/delete • system_*    │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │  Core Services                                                 │  │
@@ -438,7 +439,7 @@ mcp> exit                          # Quitter
 
 ## 🔧 Outils MCP
 
-35 outils exposés via le protocole MCP (Streamable HTTP) :
+40 outils exposés via le protocole MCP (Streamable HTTP) :
 
 ### Gestion des mémoires
 
@@ -455,10 +456,22 @@ mcp> exit                          # Quitter
 
 | Outil             | Paramètres                                         | Description                                       |
 | ----------------- | -------------------------------------------------- | ------------------------------------------------- |
-| `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `force` | Ingère un document (S3 + extraction LLM + graphe) |
-| `document_list`   | `memory_id`                                        | Liste les documents d'une mémoire                 |
+| `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `force` | Ingère un document **en synchrone** (S3 + extraction LLM + graphe) |
+| `document_list`   | `memory_id`                                        | Liste les documents (+ `source_path`, `sha256`, `ingestion_status`, job) |
 | `document_get`    | `memory_id`, `document_id`, `include_content`, `content_format` | Métadonnées d'un document (+ contenu optionnel)   |
 | `document_delete` | `memory_id`, `document_id`                         | Supprime un document et ses entités orphelines    |
+
+### Ingestion asynchrone (v3.1.0)
+
+API asynchrone, idempotente et observable : soumission immédiate, extraction en tâche de fond (un worker par mémoire). Idempotence par `source_path` (clé métier) + `sha256`. Voir [`DESIGN/INGESTION_ASYNCHRONE.md`](DESIGN/INGESTION_ASYNCHRONE.md).
+
+| Outil                       | Paramètres                                                                          | Description                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `memory_ingest_async`       | `memory_id`, `content_base64`, `filename`, `source_path`, `sha256`, `replace_existing` | Soumet un job ; réponse immédiate (`queued`/`running`/`skipped`/`changed_skipped`) |
+| `memory_ingest_batch_async` | `memory_id`, `documents[]`, `replace_existing`                                      | Soumet un lot ; renvoie `batch_id` + agrégat (counts + erreurs)   |
+| `ingest_job_status`         | `job_id`                                                                            | Statut, étape, progression %, entités/relations, timestamps       |
+| `ingest_job_list`           | `memory_id`, `status`, `source_path`, `batch_id`                                    | Liste les jobs (reprise après timeout par `source_path`/`batch_id`) |
+| `ingest_job_cancel`         | `job_id`                                                                            | Annulation best-effort (rollback complet, sans orphelin)          |
 
 ### Recherche et Q&A
 
@@ -507,7 +520,7 @@ mcp> exit                          # Quitter
 | `admin_revoke_token` | `token_hash`                          | Révoque un token                                               |
 | `admin_update_token` | `token_hash`, `memory_ids`, `action`  | Modifie les mémoires/permissions/email d'un token              |
 | `system_health`      | —                                     | État de santé des services (Neo4j, S3, LLM, Qdrant, Embedding) |
-| `system_about`       | —                                     | Identité et capacités du service (35 outils, ontologies)        |
+| `system_about`       | —                                     | Identité et capacités du service (40 outils, ontologies)        |
 | `system_whoami`      | —                                     | Identité du token courant (permissions, mémoires, email)        |
 
 ---
@@ -919,4 +932,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v3.0.0 — Juin 2026*
+*Graph Memory v3.1.0 — Juin 2026*

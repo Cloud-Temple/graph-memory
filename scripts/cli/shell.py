@@ -102,6 +102,7 @@ SHELL_COMMANDS = [
     "help", "about", "health", "whoami", "list", "use", "info", "graph", "docs",
     "entities", "entity", "relations", "ask", "query", "check", "cleanup",
     "create", "update", "ingest", "ingestdir", "docget", "deldoc", "ontologies",
+    "ingest-async", "job-status", "job-list", "job-cancel", "--replace", "--watch",
     "ontology-get", "ontology-export", "ontology-import", "ontology-update", "ontology-delete",
     "tokens", "token-create", "token-revoke", "token-update",
     # Aliases legacy (appellent admin_update_token)
@@ -537,6 +538,142 @@ async def cmd_ingest(client: MCPClient, state: dict, args: str, json_output: boo
             console.print(f"[yellow]⚠️ Déjà ingéré: {result.get('document_id')} (--force pour réingérer)[/yellow]")
         else:
             show_error(result.get("message", str(result)))
+    except Exception as e:
+        show_error(str(e))
+
+
+# =============================================================================
+# Ingestion asynchrone (shell)
+# =============================================================================
+
+_INGEST_TERMINAL_SHELL = {"succeeded", "failed", "cancelled", "skipped", "changed_skipped"}
+
+
+def _sha256_hex_shell(content_bytes: bytes) -> str:
+    import hashlib
+    return hashlib.sha256(content_bytes).hexdigest()
+
+
+def _print_job_shell(job: dict):
+    st = job.get("status", "?")
+    color = {
+        "succeeded": "green", "running": "cyan", "queued": "yellow",
+        "failed": "red", "cancelled": "magenta", "skipped": "blue",
+        "changed_skipped": "yellow",
+    }.get(st, "white")
+    console.print(
+        f"[{color}]● {st}[/{color}] [bold]{job.get('job_id', '-')}[/bold]  "
+        f"{job.get('current_step', '')} {job.get('progress_percent', 0)}%  "
+        f"E:{job.get('created_entities', 0)} R:{job.get('created_relations', 0)}  "
+        f"{job.get('source_path') or job.get('filename') or ''}"
+    )
+    if job.get("error"):
+        console.print(f"  [red]{job['error']}[/red]")
+
+
+async def _watch_job_shell(client: MCPClient, job_id: str):
+    while True:
+        job = await client.call_tool("ingest_job_status", {"job_id": job_id})
+        _print_job_shell(job)
+        if job.get("status") in _INGEST_TERMINAL_SHELL or job.get("status") == "not_found":
+            return job
+        await asyncio.sleep(2)
+
+
+async def cmd_ingest_async(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Soumet un document à l'ingestion asynchrone. Usage: ingest-async <path> [--replace] [--watch]"""
+    mem = state.get("memory")
+    if not mem:
+        show_warning("Sélectionnez une mémoire avec 'use <id>' avant d'ingérer")
+        return
+    if not args:
+        show_warning("Usage: ingest-async <chemin_fichier> [--replace] [--watch]")
+        return
+    replace = "--replace" in args
+    watch = "--watch" in args
+    file_path = args.replace("--replace", "").replace("--watch", "").strip()
+    if not os.path.isfile(file_path):
+        show_error(f"Fichier non trouvé: {file_path}")
+        return
+    try:
+        from datetime import datetime, timezone
+        with open(file_path, "rb") as f:
+            content_bytes = f.read()
+        content_b64 = base64.b64encode(content_bytes).decode("utf-8")
+        filename = os.path.basename(file_path)
+        mtime = os.path.getmtime(file_path)
+        result = await client.call_tool("memory_ingest_async", {
+            "memory_id": mem,
+            "content_base64": content_b64,
+            "filename": filename,
+            "source_path": os.path.abspath(file_path),
+            "sha256": _sha256_hex_shell(content_bytes),
+            "source_modified_at": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(),
+            "replace_existing": replace,
+        })
+        if json_output:
+            show_json(result)
+            return
+        if result.get("job_id"):
+            _print_job_shell(result)
+        else:
+            console.print(f"[blue]{result.get('status')}[/blue] — {result.get('message', '')}")
+        if watch and result.get("job_id") and result.get("status") not in _INGEST_TERMINAL_SHELL:
+            console.print("[dim]⏳ Suivi (poll local toutes les 2s)…[/dim]")
+            await _watch_job_shell(client, result["job_id"])
+    except Exception as e:
+        show_error(str(e))
+
+
+async def cmd_job_status(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """État d'un job. Usage: job-status <job_id> [--watch]"""
+    if not args:
+        show_warning("Usage: job-status <job_id> [--watch]")
+        return
+    watch = "--watch" in args
+    job_id = args.replace("--watch", "").strip()
+    try:
+        if watch and not json_output:
+            await _watch_job_shell(client, job_id)
+            return
+        result = await client.call_tool("ingest_job_status", {"job_id": job_id})
+        show_json(result) if json_output else _print_job_shell(result)
+    except Exception as e:
+        show_error(str(e))
+
+
+async def cmd_job_list(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Liste les jobs d'ingestion de la mémoire courante. Usage: job-list [status]"""
+    mem = state.get("memory")
+    if not mem:
+        show_warning("Sélectionnez une mémoire avec 'use <id>'")
+        return
+    status = args.strip() or None
+    try:
+        result = await client.call_tool("ingest_job_list", {"memory_id": mem, "status": status})
+        if json_output:
+            show_json(result)
+            return
+        if result.get("status") == "ok":
+            console.print(f"[bold]{result.get('count', 0)} job(s)[/bold] — {mem}")
+            for job in result.get("jobs", []):
+                _print_job_shell(job)
+        else:
+            show_error(result.get("message", str(result)))
+    except Exception as e:
+        show_error(str(e))
+
+
+async def cmd_job_cancel(client: MCPClient, state: dict, args: str, json_output: bool = False):
+    """Annule un job. Usage: job-cancel <job_id>"""
+    if not args:
+        show_warning("Usage: job-cancel <job_id>")
+        return
+    try:
+        result = await client.call_tool("ingest_job_cancel", {"job_id": args.strip()})
+        show_json(result) if json_output else console.print(
+            f"[magenta]{result.get('status')}[/magenta] — {result.get('message', '')}"
+        )
     except Exception as e:
         show_error(str(e))
 
@@ -1632,6 +1769,10 @@ def run_shell(url: str, token: str):
         "docs":         "Lister les documents",
         "ingest <path>":"Ingérer un fichier (--force pour réingérer)",
         "ingestdir <p>":"Ingérer un répertoire (--exclude, --confirm, --force)",
+        "ingest-async <path>": "Ingestion asynchrone d'un fichier (--replace, --watch)",
+        "job-status <id>": "État d'un job d'ingestion (--watch)",
+        "job-list [status]": "Lister les jobs d'ingestion de la mémoire courante",
+        "job-cancel <id>": "Annuler un job d'ingestion (best-effort)",
         "docget <id>":  "Lire un document de la mémoire courante",
         "deldoc <id>":  "Supprimer un document",
         # --- Exploration ---
@@ -1763,6 +1904,19 @@ def run_shell(url: str, token: str):
 
             elif command == "ingestdir":
                 asyncio.run(cmd_ingestdir(client, state, args, json_output=json_output))
+
+            # --- Ingestion asynchrone ---
+            elif command == "ingest-async":
+                asyncio.run(cmd_ingest_async(client, state, args, json_output=json_output))
+
+            elif command == "job-status":
+                asyncio.run(cmd_job_status(client, state, args, json_output=json_output))
+
+            elif command == "job-list":
+                asyncio.run(cmd_job_list(client, state, args, json_output=json_output))
+
+            elif command == "job-cancel":
+                asyncio.run(cmd_job_cancel(client, state, args, json_output=json_output))
 
             elif command == "docget":
                 asyncio.run(cmd_docget(client, state, args, json_output=json_output))

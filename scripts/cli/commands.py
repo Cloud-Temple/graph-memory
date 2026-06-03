@@ -769,6 +769,221 @@ def document_delete(ctx, memory_id, document_id, confirm, jflag):
 
 
 # =============================================================================
+# Ingestion asynchrone
+# =============================================================================
+
+_INGEST_TERMINAL = {"succeeded", "failed", "cancelled", "skipped", "changed_skipped"}
+
+
+def _sha256_hex(content_bytes: bytes) -> str:
+    import hashlib
+    return hashlib.sha256(content_bytes).hexdigest()
+
+
+def _print_job(job: dict):
+    """Affichage compact d'un job d'ingestion."""
+    st = job.get("status", "?")
+    color = {
+        "succeeded": "green", "running": "cyan", "queued": "yellow",
+        "failed": "red", "cancelled": "magenta", "skipped": "blue",
+        "changed_skipped": "yellow",
+    }.get(st, "white")
+    console.print(
+        f"[{color}]● {st}[/{color}] [bold]{job.get('job_id', '-')}[/bold]  "
+        f"{job.get('current_step', '')} {job.get('progress_percent', 0)}%  "
+        f"E:{job.get('created_entities', 0)} R:{job.get('created_relations', 0)}  "
+        f"{job.get('source_path') or job.get('filename') or ''}"
+    )
+    if job.get("error"):
+        console.print(f"  [red]{job['error']}[/red]")
+
+
+async def _watch_job(client, job_id: str):
+    """Poll local jusqu'à un statut terminal (option humaine ; les agents ne pollent pas)."""
+    while True:
+        job = await client.call_tool("ingest_job_status", {"job_id": job_id})
+        _print_job(job)
+        if job.get("status") in _INGEST_TERMINAL or job.get("status") == "not_found":
+            return job
+        await asyncio.sleep(2)
+
+
+@cli.group()
+def ingest():
+    """⚡ Ingestion asynchrone (jobs observables, idempotents)."""
+    pass
+
+
+@ingest.command("async")
+@click.argument("memory_id")
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--source-path", default=None, help="Chemin source (clé métier stable). Défaut: chemin absolu du fichier.")
+@click.option("--replace", is_flag=True, help="Remplacer explicitement si le checksum a changé")
+@click.option("--watch", "-w", is_flag=True, help="Suivre la progression jusqu'à la fin (poll local)")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ingest_async(ctx, memory_id, file_path, source_path, replace, watch, jflag):
+    """📤 Soumettre un document à l'ingestion asynchrone (rend la main immédiatement)."""
+    async def _run():
+        try:
+            from datetime import datetime, timezone
+            with open(file_path, "rb") as f:
+                content_bytes = f.read()
+            content_b64 = base64.b64encode(content_bytes).decode("utf-8")
+            filename = os.path.basename(file_path)
+            sha256 = _sha256_hex(content_bytes)
+            effective_source_path = source_path or os.path.abspath(file_path)
+            mtime = os.path.getmtime(file_path)
+            source_modified_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("memory_ingest_async", {
+                "memory_id": memory_id,
+                "content_base64": content_b64,
+                "filename": filename,
+                "source_path": effective_source_path,
+                "sha256": sha256,
+                "source_modified_at": source_modified_at,
+                "replace_existing": replace,
+            })
+            if jflag:
+                show_json(result)
+                return
+            _print_job(result) if result.get("job_id") else console.print(
+                f"[blue]{result.get('status')}[/blue] — {result.get('message', '')}"
+            )
+            if watch and result.get("job_id") and result.get("status") not in _INGEST_TERMINAL:
+                console.print("[dim]⏳ Suivi (poll local toutes les 2s)…[/dim]")
+                await _watch_job(client, result["job_id"])
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+@ingest.command("batch")
+@click.argument("memory_id")
+@click.argument("directory", type=click.Path(exists=True, file_okay=False))
+@click.option("--exclude", "-e", multiple=True, help="Patterns glob à exclure (répétable)")
+@click.option("--replace", is_flag=True, help="Remplacer explicitement si checksum différent")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ingest_batch(ctx, memory_id, directory, exclude, replace, jflag):
+    """📁 Soumettre un répertoire entier en lot asynchrone (récursif)."""
+    import fnmatch
+    from pathlib import Path
+    SUPPORTED = {".txt", ".md", ".html", ".docx", ".pdf", ".csv"}
+
+    async def _run():
+        try:
+            documents = []
+            for root, dirs, files in os.walk(directory):
+                for fname in sorted(files):
+                    if Path(fname).suffix.lower() not in SUPPORTED:
+                        continue
+                    rel = os.path.relpath(os.path.join(root, fname), directory)
+                    if any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(fname, p) for p in exclude):
+                        continue
+                    with open(os.path.join(root, fname), "rb") as f:
+                        cb = f.read()
+                    documents.append({
+                        "content_base64": base64.b64encode(cb).decode("utf-8"),
+                        "filename": fname,
+                        "source_path": rel,
+                        "sha256": _sha256_hex(cb),
+                    })
+            if not documents:
+                console.print("[yellow]Aucun fichier supporté trouvé.[/yellow]")
+                return
+            console.print(f"[dim]📦 Soumission de {len(documents)} document(s)…[/dim]")
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("memory_ingest_batch_async", {
+                "memory_id": memory_id, "documents": documents, "replace_existing": replace,
+            })
+            if jflag:
+                show_json(result)
+                return
+            if result.get("status") == "ok":
+                console.print(f"[green]✅ Lot soumis[/green] — batch_id: [bold]{result.get('batch_id')}[/bold]")
+                console.print(f"  Total: {result.get('total')}  Détail: {result.get('counts')}")
+                for err in result.get("errors", []):
+                    console.print(f"  [red]✗ {err.get('source_path')}: {err.get('error')}[/red]")
+                console.print(f"[dim]Suivi : mcp-cli ingest list {memory_id} --batch-id {result.get('batch_id')}[/dim]")
+            else:
+                show_error(result.get("message", str(result)))
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+@ingest.command("status")
+@click.argument("job_id")
+@click.option("--watch", "-w", is_flag=True, help="Suivre jusqu'à la fin (poll local)")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ingest_status(ctx, job_id, watch, jflag):
+    """🔎 État d'un job d'ingestion."""
+    async def _run():
+        try:
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            if watch and not jflag:
+                await _watch_job(client, job_id)
+                return
+            result = await client.call_tool("ingest_job_status", {"job_id": job_id})
+            show_json(result) if jflag else _print_job(result)
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+@ingest.command("list")
+@click.argument("memory_id")
+@click.option("--status", "-s", default=None, help="Filtrer par statut")
+@click.option("--source-path", default=None, help="Filtrer par source_path")
+@click.option("--batch-id", default=None, help="Filtrer par batch_id")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ingest_list(ctx, memory_id, status, source_path, batch_id, jflag):
+    """📋 Lister les jobs d'ingestion d'une mémoire (reprise après timeout)."""
+    async def _run():
+        try:
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("ingest_job_list", {
+                "memory_id": memory_id, "status": status,
+                "source_path": source_path, "batch_id": batch_id,
+            })
+            if jflag:
+                show_json(result)
+                return
+            if result.get("status") == "ok":
+                console.print(f"[bold]{result.get('count', 0)} job(s)[/bold] — {memory_id}")
+                for job in result.get("jobs", []):
+                    _print_job(job)
+            else:
+                show_error(result.get("message", str(result)))
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+@ingest.command("cancel")
+@click.argument("job_id")
+@click.option("--json", "-j", "jflag", is_flag=True, help="JSON brut")
+@click.pass_context
+def ingest_cancel(ctx, job_id, jflag):
+    """🛑 Annuler un job d'ingestion (best-effort, sans corrompre le graphe)."""
+    async def _run():
+        try:
+            client = MCPClient(ctx.obj["url"], ctx.obj["token"])
+            result = await client.call_tool("ingest_job_cancel", {"job_id": job_id})
+            show_json(result) if jflag else console.print(
+                f"[magenta]{result.get('status')}[/magenta] — {result.get('message', '')}"
+            )
+        except Exception as e:
+            show_error(str(e))
+    asyncio.run(_run())
+
+
+# =============================================================================
 # Question / Réponse
 # =============================================================================
 
