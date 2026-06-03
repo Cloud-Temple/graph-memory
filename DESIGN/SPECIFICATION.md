@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 3.1.0 | **Date** : 3 juin 2026
+> **Version** : 3.1.1 | **Date** : 3 juin 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 

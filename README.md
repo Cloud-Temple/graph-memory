@@ -66,9 +66,9 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.1.0).
+Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.1.1).
 
-**Dernière version** : v3.1.0 (3 juin 2026) — Ingestion asynchrone, idempotente et observable : 5 nouveaux outils MCP (`memory_ingest_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel`, `memory_ingest_batch_async`), idempotence par `source_path` + `sha256`, marqueur d'ingestion durable et suppression multi-backend cohérente.
+**Dernière version** : v3.1.1 (3 juin 2026) — Console `/admin` : page « ⚡ Ingest Jobs » (suivi temps réel des jobs d'ingestion asynchrone, annulation, soumission async navigateur). S'appuie sur la v3.1.0 (ingestion asynchrone, idempotente et observable : 5 outils MCP, idempotence par `source_path` + `sha256`, marqueur durable, suppression multi-backend cohérente).
 
 ---
 
@@ -932,4 +932,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v3.1.0 — Juin 2026*
+*Graph Memory v3.1.1 — Juin 2026*

@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.1.1] - 2026-06-03
+
+### 🖥️ Console `/admin` — page « Ingest Jobs »
+
+Ajoute à la console web `/admin` une page de suivi des jobs d'ingestion asynchrone (complète la v3.1.0 côté interface).
+
+- **Nouvelle section « ⚡ Ingest Jobs »** : listing des jobs d'une mémoire avec filtres par mémoire et par statut
+- **Suivi temps réel** : barre de progression + étape courante, **rafraîchissement automatique** (polling 3 s, arrêté à la navigation)
+- **Actions** : annulation d'un job (`ingest_job_cancel`), détail complet (`ingest_job_status`)
+- **Soumission asynchrone depuis le navigateur** : upload → `memory_ingest_async`, avec **checksum SHA-256 calculé côté client** (`crypto.subtle`), `source_path` et `replace_existing` ; bascule automatique sur la page de suivi
+- Assets `/admin` re-versionnés (`?v=3.1.1-admin`), CSP-safe (event delegation, largeurs de barres via l'API DOM)
+- Test statique anti-régression `_assert_ingest_jobs_admin_page` (recette 206/206 PASS)
+
 ## [3.1.0] - 2026-06-03
 
 ### ⚡ Ingestion asynchrone, idempotente et observable

@@ -54,7 +54,7 @@ Ajouter une **API d'ingestion asynchrone, idempotente et observable**, en réuti
 |---|----------|--------------|---------------|
 | D1 | **Stockage de l'état des jobs** | **Queue in-memory best-effort** (calqué sur Live Memory) **+ marqueur `ingestion_status` durable sur le nœud `Document`** (arbitrage A, §11.2) | Pattern éprouvé, livraison rapide ; le marqueur durable supprime le risque de faux `skipped` sur ingestion partielle. Voir §3.1. |
 | D2 | **Clé d'idempotence** | **`source_path` primaire + `sha256` détecteur de changement**, fallback hash pour le legacy | Conforme à la demande ; tolère les documents historiques ingérés sans `source_path`. |
-| D3 | **Périmètre de livraison** | **MCP + CLI (Click + shell) + recette de tests** | Respecte la règle d'alignement 3 couches du projet. Console `/admin` reportée à un lot ultérieur. |
+| D3 | **Périmètre de livraison** | **MCP + CLI (Click + shell) + recette de tests** ; **console `/admin` ajoutée** (page « Ingest Jobs ») | Règle d'alignement 3 couches respectée. La page `/admin` (initialement reportée) a finalement été livrée : listing avec rafraîchissement auto (polling 3 s), filtres mémoire/statut, barre de progression, annulation, détail, et soumission asynchrone (SHA-256 calculé navigateur). |
 | D4 | **Modèle de parallélisme** | **Un worker `asyncio` par `memory_id`** | Sérialise les écritures Neo4j/Qdrant d'une même mémoire (zéro conflit), tout en permettant le parallélisme entre mémoires distinctes. |
 
 ### 3.1 Nuance importante sur le choix in-memory (D1)

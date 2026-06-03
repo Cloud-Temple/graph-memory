@@ -169,6 +169,7 @@ const CATS = {
     ontologies: { icon: '🧬', label: 'Ontologies' },
     memories: { icon: '🧠', label: 'Memories' },
     documents: { icon: '📄', label: 'Documents' },
+    jobs: { icon: '⚡', label: 'Ingest Jobs' },
     search: { icon: '🔎', label: 'Ask & Query' },
     tokens: { icon: '🔑', label: 'Tokens' },
     backups: { icon: '💾', label: 'Backups' },
@@ -268,6 +269,7 @@ function buildSidebar() {
 }
 
 function showCategory(cat) {
+    stopJobsPolling();  // arrêter le polling si on quitte la page Jobs
     activeCat = cat;
     document.querySelectorAll('.sidebar-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.cat === cat));
     const content = document.getElementById('content');
@@ -276,6 +278,7 @@ function showCategory(cat) {
         dashboard: renderDashboard,
         memories: renderMemories,
         documents: renderDocuments,
+        jobs: renderIngestJobs,
         search: renderSearch,
         tokens: renderTokens,
         backups: renderBackups,
@@ -432,6 +435,12 @@ document.addEventListener('click', event => {
     if (action === 'ingest-document') return ingestDocument();
     if (action === 'load-documents') return loadDocuments();
     if (action === 'read-document') return readDocument(data.memory, data.document);
+    if (action === 'load-jobs') return loadIngestJobs();
+    if (action === 'toggle-jobs-autorefresh') return toggleJobsAutoRefresh();
+    if (action === 'view-job') return viewIngestJob(data.job);
+    if (action === 'cancel-job') return cancelIngestJob(data.job);
+    if (action === 'show-ingest-async') return showIngestAsync();
+    if (action === 'ingest-async-submit') return ingestAsyncSubmit();
     if (action === 'ask') return doAsk();
     if (action === 'query') return doQuery();
     if (action === 'create-token') return showCreateToken();
@@ -452,6 +461,7 @@ document.addEventListener('click', event => {
 document.addEventListener('change', event => {
     if (event.target.id === 'documentsMemory') loadDocuments();
     if (event.target.id === 'backupMemory') loadBackups();
+    if (event.target.id === 'jobsMemory' || event.target.id === 'jobsStatus') loadIngestJobs();
     if (event.target.name === 'ut_memory_mode') syncTokenMemoryMode();
 });
 
@@ -726,6 +736,179 @@ async function readDocument(memoryId, documentId) {
     }
     const content = result.content || result.content_note;
     showModal('Document Preview', `<pre class="pretty-code">${esc(content)}</pre>`, 'Close', () => true, { size: 'wide' });
+}
+
+// =============================================================================
+// Ingest Jobs (ingestion asynchrone) — v3.1.0
+// =============================================================================
+
+const JOB_TERMINAL = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'changed_skipped']);
+const JOB_STATUS_CLASS = {
+    succeeded: 'green', running: 'blue', queued: 'amber', failed: 'red',
+    cancelled: 'grey', cancelling: 'amber', skipped: 'grey', changed_skipped: 'amber',
+};
+let jobsPollTimer = null;
+
+function stopJobsPolling() {
+    if (jobsPollTimer) { clearInterval(jobsPollTimer); jobsPollTimer = null; }
+}
+
+function jobStatusBadge(status) {
+    const cls = JOB_STATUS_CLASS[status] || 'grey';
+    return `<span class="job-badge ${cls}">${esc(status || '?')}</span>`;
+}
+
+function progressBar(percent) {
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    return `<div class="job-progress"><div class="job-progress-fill" data-pct="${p}"></div><span class="job-progress-label">${p}%</span></div>`;
+}
+
+async function renderIngestJobs() {
+    const content = document.getElementById('content');
+    await loadMemories();
+    content.innerHTML = `
+        <div class="page">
+            <div class="page-header">
+                <h2 class="page-title">⚡ Ingest Jobs</h2>
+                <div class="toolbar">
+                    ${memorySelect('jobsMemory', true)}
+                    <select class="form-input" id="jobsStatus">
+                        <option value="">all statuses</option>
+                        <option value="queued">queued</option>
+                        <option value="running">running</option>
+                        <option value="succeeded">succeeded</option>
+                        <option value="failed">failed</option>
+                        <option value="cancelled">cancelled</option>
+                        <option value="skipped">skipped</option>
+                        <option value="changed_skipped">changed_skipped</option>
+                    </select>
+                    <button class="btn-action" data-action="load-jobs">Refresh</button>
+                    <button class="btn-action" id="jobsAutoBtn" data-action="toggle-jobs-autorefresh">▶ Auto</button>
+                    <button class="btn-action green" data-action="show-ingest-async">Ingest (async)</button>
+                </div>
+            </div>
+            <div id="jobsContent" class="empty">Choose a memory to list its ingestion jobs.</div>
+        </div>`;
+}
+
+async function loadIngestJobs() {
+    const memoryId = gv('jobsMemory');
+    const el = document.getElementById('jobsContent');
+    if (!el) return;
+    if (!memoryId) {
+        stopJobsPolling();
+        el.innerHTML = '<div class="empty">Choose a memory to list its ingestion jobs.</div>';
+        return;
+    }
+    const status = gv('jobsStatus');
+    const args = { memory_id: memoryId };
+    if (status) args.status = status;
+    const result = await callTool('ingest_job_list', args);
+    if (result.status !== 'ok') {
+        el.innerHTML = `<div class="empty">${esc(result.message || 'Unable to list jobs.')}</div>`;
+        return;
+    }
+    const jobs = result.jobs || [];
+    const running = jobs.filter(j => !JOB_TERMINAL.has(j.status)).length;
+    if (!jobs.length) {
+        el.innerHTML = '<div class="empty">No ingestion job for this memory.</div>';
+        return;
+    }
+    el.innerHTML = `
+        <div class="job-summary">${jobs.length} job(s) — <strong>${running}</strong> en cours/attente
+            <span class="text-muted">· garantie: ${esc(result.guarantee || 'in_memory_best_effort')}</span></div>
+        <table class="data-table"><thead><tr>
+            <th>Statut</th><th>Étape</th><th>Progression</th><th>source_path / fichier</th>
+            <th>E / R</th><th>MAJ</th><th>Actions</th>
+        </tr></thead><tbody>${
+            jobs.map(j => {
+                const term = JOB_TERMINAL.has(j.status);
+                const label = esc(j.source_path || j.filename || j.job_id);
+                return `<tr>
+                    <td>${jobStatusBadge(j.status)}</td>
+                    <td class="mono text-muted">${esc(j.current_step || '')}</td>
+                    <td>${progressBar(j.progress_percent)}</td>
+                    <td><strong>${label}</strong><br><span class="text-muted mono">${esc(j.job_id)}</span></td>
+                    <td>${fmtInt(j.created_entities)} / ${fmtInt(j.created_relations)}</td>
+                    <td class="text-muted">${esc(fmtDate(j.updated_at))}</td>
+                    <td class="actions-cell">
+                        <button class="btn-sm blue" data-action="view-job" data-job="${esc(j.job_id)}">View</button>
+                        ${term ? '' : `<button class="btn-sm red" data-action="cancel-job" data-job="${esc(j.job_id)}">Cancel</button>`}
+                    </td>
+                </tr>`;
+            }).join('')
+        }</tbody></table>`;
+    // Appliquer la largeur des barres de progression (CSP-safe : pas de style inline en HTML)
+    el.querySelectorAll('.job-progress-fill').forEach(bar => { bar.style.width = (bar.dataset.pct || 0) + '%'; });
+}
+
+function toggleJobsAutoRefresh() {
+    const btn = document.getElementById('jobsAutoBtn');
+    if (jobsPollTimer) {
+        stopJobsPolling();
+        if (btn) { btn.textContent = '▶ Auto'; btn.classList.remove('active'); }
+    } else {
+        if (!gv('jobsMemory')) { alert('Choisissez d\'abord une mémoire.'); return; }
+        loadIngestJobs();
+        jobsPollTimer = setInterval(() => { if (activeCat === 'jobs') loadIngestJobs(); else stopJobsPolling(); }, 3000);
+        if (btn) { btn.textContent = '⏸ Auto (3s)'; btn.classList.add('active'); }
+    }
+}
+
+async function viewIngestJob(jobId) {
+    const result = await callTool('ingest_job_status', { job_id: jobId });
+    showResultModal('Ingest Job', result);
+}
+
+async function cancelIngestJob(jobId) {
+    if (!confirm(`Annuler le job ${jobId} ? (best-effort, sans corrompre le graphe)`)) return;
+    const result = await callTool('ingest_job_cancel', { job_id: jobId });
+    if (result.status === 'error') alert(result.message || 'Cancel failed.');
+    await loadIngestJobs();
+}
+
+async function sha256Hex(buffer) {
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function showIngestAsync() {
+    showModal('Ingest (async)', `
+        <div class="form-group"><label class="form-label">Memory</label>${memorySelect('iaMemory')}</div>
+        <div class="form-group"><label class="form-label">File</label><input class="form-input" id="iaFile" type="file"></div>
+        <div class="form-group"><label class="form-label">Source path (clé métier)</label><input class="form-input" id="iaSourcePath" placeholder="ex: docs/produit/iaas.md — défaut: nom du fichier" data-1p-ignore></div>
+        <label class="form-check"><input type="checkbox" id="iaReplace"> replace_existing (remplacer si le checksum a changé)</label>
+        <div id="iaStatus" class="text-muted"></div>
+    `, 'Submit', async () => { await ingestAsyncSubmit(); return false; });
+}
+
+async function ingestAsyncSubmit() {
+    const status = document.getElementById('iaStatus');
+    const memoryId = gv('iaMemory');
+    const file = document.getElementById('iaFile')?.files?.[0];
+    if (!memoryId || !file) { if (status) status.textContent = 'Choisissez une mémoire et un fichier.'; return; }
+    if (status) status.textContent = `Lecture de ${file.name} (${fmtSize(file.size)})...`;
+    const buffer = await file.arrayBuffer();
+    const contentBase64 = arrayBufferToBase64(buffer);
+    const sha256 = await sha256Hex(buffer);
+    if (status) status.textContent = 'Soumission du job...';
+    const result = await callTool('memory_ingest_async', {
+        memory_id: memoryId,
+        content_base64: contentBase64,
+        filename: file.name,
+        source_path: gv('iaSourcePath') || file.name,
+        sha256,
+        source_modified_at: new Date(file.lastModified || Date.now()).toISOString(),
+        replace_existing: checked('iaReplace'),
+    });
+    if (status) status.textContent = result.message || result.status || '';
+    closeModal();
+    showResultModal('Soumission asynchrone', result);
+    // Basculer sur la page Jobs de cette mémoire et lancer le suivi auto
+    if (activeCat !== 'jobs') showCategory('jobs');
+    const sel = document.getElementById('jobsMemory');
+    if (sel) sel.value = memoryId;
+    await loadIngestJobs();
 }
 
 function renderSearch() {
