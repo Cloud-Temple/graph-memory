@@ -80,6 +80,27 @@ def _assert_admin_ui_actions_are_wired() -> None:
         ok("admin UI — toutes les actions cliquables sont câblées", f"{len(actions)} actions")
 
 
+def _assert_ingest_jobs_admin_page() -> None:
+    """Vérifie la page Ingest Jobs (/admin) : module, renderer, polling, outils async."""
+    source = _admin_app_source()
+    checks = {
+        "module jobs (⚡)": "jobs: { icon: '⚡'" in source,
+        "renderer câblé": "jobs: renderIngestJobs" in source,
+        "fonction renderIngestJobs": "async function renderIngestJobs(" in source,
+        "listing via ingest_job_list": "ingest_job_list" in source,
+        "annulation ingest_job_cancel": "ingest_job_cancel" in source,
+        "détail ingest_job_status": "ingest_job_status" in source,
+        "soumission async memory_ingest_async": "memory_ingest_async" in source,
+        "sha256 navigateur": "crypto.subtle.digest('SHA-256'" in source,
+        "auto-refresh polling": "jobsPollTimer" in source and "stopJobsPolling()" in source,
+    }
+    missing = [name for name, passed in checks.items() if not passed]
+    if missing:
+        fail("admin UI — page Ingest Jobs", f"Contrôles KO: {missing}")
+    else:
+        ok("admin UI — page Ingest Jobs", f"{len(checks)} contrôles")
+
+
 def _assert_admin_ui_no_raw_tool() -> None:
     """Vérifie que le module Raw Tool a réellement disparu de l'interface."""
     source = _admin_app_source()
@@ -565,6 +586,7 @@ entity_types:
     _assert_admin_ui_actions_are_wired()
     _assert_admin_ui_no_raw_tool()
     _assert_admin_ui_modules_have_emoji()
+    _assert_ingest_jobs_admin_page()
     _assert_backup_all_memories_supported()
     _assert_json_results_use_modal_tabs()
     _assert_admin_assets_are_cache_busted()

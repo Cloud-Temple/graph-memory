@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.1.0).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.1.1).
 
-**Latest**: v3.1.0 (June 3, 2026) — Asynchronous, idempotent and observable ingestion: 5 new MCP tools (`memory_ingest_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel`, `memory_ingest_batch_async`), idempotency by `source_path` + `sha256`, durable ingestion marker, and consistent multi-backend deletion.
+**Latest**: v3.1.1 (June 3, 2026) — Web `/admin` console: "⚡ Ingest Jobs" page (real-time tracking of async ingestion jobs, cancellation, browser-side async submission). Builds on v3.1.0 (asynchronous, idempotent and observable ingestion: 5 MCP tools, idempotency by `source_path` + `sha256`, durable ingestion marker, consistent multi-backend deletion).
 
 ---
 
