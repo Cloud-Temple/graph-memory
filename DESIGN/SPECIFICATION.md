@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 2.2.0 | **Date** : 16 mai 2026
+> **Version** : 3.1.0 | **Date** : 3 juin 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 
@@ -11,7 +11,7 @@
 1. [Vision & Objectifs](#1-vision--objectifs)
 2. [Architecture](#2-architecture)
 3. [Modèle de données](#3-modèle-de-données)
-4. [Outils MCP](#4-outils-mcp--30-outils)
+4. [Outils MCP](#4-outils-mcp--40-outils)
 5. [Pipeline d'ingestion](#5-pipeline-dingestion)
 6. [Pipeline de recherche & Q&A](#6-pipeline-de-recherche--qa)
 7. [Système d'ontologies](#7-système-dontologies)
@@ -66,7 +66,7 @@ Les systèmes RAG (Retrieval-Augmented Generation) traditionnels souffrent de li
 ### 1.5 Périmètre
 
 **Inclus (v2.0.1)** :
-- Serveur MCP Streamable HTTP (30 outils)
+- Serveur MCP Streamable HTTP (40 outils)
 - 6 ontologies (legal, cloud, managed-services, presales, general, software-development)
 - Interface web interactive (graphe vis-network, panneau Q&A)
 - CLI complète (Click scriptable + Shell interactif)
@@ -152,7 +152,7 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
                                │ Streamable HTTP + Bearer Token
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│              Coraza WAF (Port 8080 — seul port exposé)               │
+│              Coraza WAF (Port 8070 — seul port exposé)               │
 │  OWASP CRS · Rate Limiting · CSP · HSTS · Let's Encrypt (prod)       │
 └──────────────────────────────┬───────────────────────────────────────┘
                                │ réseau Docker interne (mcp-network)
@@ -165,7 +165,7 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
 │  │  → mcp.streamable_http_app()                                   │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools Layer (30 outils)                                   │  │
+│  │  MCP Tools Layer (40 outils)                                   │  │
 │  │  • Memory CRUD (5)    • Documents (4)   • Recherche/Q&A (4)    │  │
 │  │  • Graphe (1)         • Ontologies (1)  • Storage S3 (2)       │  │
 │  │  • Admin tokens (4)   • Backup/Restore (6) • System (3)        │  │
@@ -225,7 +225,7 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
 
 ```yaml
 services:
-  waf:          # Port 8080 exposé (seul point d'entrée)
+  waf:          # Port 8070 exposé côté host (seul point d'entrée)
   mcp-memory:   # Port 8002 interne uniquement
   neo4j:        # Ports 7474/7687 internes uniquement
   qdrant:       # Port 6333 interne uniquement
@@ -276,7 +276,7 @@ Chaque mémoire (`memory_id`) crée un namespace isolé via des **labels préfix
 | Label           | Propriétés                                                                                                                                          | Description                             |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
 | `{ns}_Memory`   | `id`, `name`, `description`, `ontology`, `ontology_uri`, `namespace`, `owner_token_hash`, `created_at`                                              | Métadonnées de la mémoire               |
-| `{ns}_Document` | `id`, `memory_id`, `uri`, `filename`, `hash`, `ingested_at`, `metadata_json`, `source_path`, `source_modified_at`, `size_bytes`, `text_length`, `content_type` | Document source + métadonnées enrichies |
+| `{ns}_Document` | `id`, `memory_id`, `uri`, `filename`, `hash`, `ingested_at`, `metadata_json`, `source_path`, `source_modified_at`, `size_bytes`, `text_length`, `content_type`, `ingestion_status`, `last_ingest_job_id`, `chunk_count` | Document source + métadonnées enrichies + état d'ingestion durable (v3.1.0) |
 | `{ns}_Entity`   | `name`, `memory_id`, `type`, `description`, `source_docs`, `mention_count`, `created_at`, `updated_at`                                              | Entité extraite par le LLM              |
 
 > **Note** : Les chunks textuels ne sont **pas** stockés dans Neo4j. Ils sont stockés uniquement dans Qdrant (voir §3.5). Le graphe Neo4j contient les entités et relations structurées, tandis que Qdrant gère le RAG vectoriel.
@@ -300,6 +300,11 @@ CREATE FULLTEXT INDEX {ns}_entity_fulltext FOR (e:{ns}_Entity) ON EACH [e.name]
 OPTIONS {indexConfig: {`fulltext.analyzer`: 'standard-folding'}}
 
 -- Recherche : "réversibilité", "reversibilite", "REVERSIBILITE" matchent tous
+
+-- Contrainte d'unicité (memory_id, source_path) — v3.1.0, clé métier stable
+-- Best-effort : créée au premier add_document, ignore les source_path null (legacy)
+CREATE CONSTRAINT document_source_path_unique IF NOT EXISTS
+FOR (d:Document) REQUIRE (d.memory_id, d.source_path) IS UNIQUE
 ```
 
 ### 3.5 Collections Qdrant
@@ -330,7 +335,7 @@ Chaque mémoire a sa propre collection Qdrant :
 └── _health_check/                    # Fichier de test connectivité
 ```
 
-## 4. Outils MCP — 30 outils
+## 4. Outils MCP — 40 outils
 
 ### 4.1 Gestion des mémoires (5 outils)
 
@@ -348,10 +353,24 @@ Chaque mémoire a sa propre collection Qdrant :
 
 | Outil             | Paramètres                                                                                              | Auth      | Description                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------- |
-| `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `metadata?`, `force?`, `source_path?`, `source_modified_at?` | 🔑 write | Ingère un document : S3 + LLM extraction + Neo4j + Qdrant      |
-| `document_list`   | `memory_id`                                                                                             | 🔑 read  | Liste les documents avec métadonnées                           |
+| `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `metadata?`, `force?`, `source_path?`, `source_modified_at?` | 🔑 write | Ingère un document **en synchrone** : S3 + LLM extraction + Neo4j + Qdrant |
+| `document_list`   | `memory_id`                                                                                             | 🔑 read  | Liste les documents + `source_path`, `sha256`, `ingestion_status`, `last_ingest_job_id` |
 | `document_get`    | `memory_id`, `document_id`, `include_content?`, `content_format?`                                       | 🔑 read  | Métadonnées (+ contenu si `include_content=true`). `content_format="text"` (défaut) = texte extrait, `"raw"` = base64 original |
-| `document_delete` | `memory_id`, `document_id`                                                                              | 🔑 write | Supprime doc + entités orphelines + chunks Qdrant + fichier S3 |
+| `document_delete` | `memory_id`, `document_id`                                                                              | 🔑 write | Supprime doc + entités orphelines + chunks Qdrant + fichier S3 (`partial_deleted` si un backend échoue) |
+
+### 4.2.1 Ingestion asynchrone (5 outils) — v3.1.0
+
+API d'ingestion **asynchrone, idempotente et observable** : le client soumet et récupère immédiatement la main ; l'extraction LLM + embeddings se déroulent en tâche de fond (file FIFO, **un worker par mémoire**). Voir `DESIGN/INGESTION_ASYNCHRONE.md`.
+
+| Outil                       | Paramètres                                                                                                                             | Auth     | Description                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `memory_ingest_async`       | `memory_id`, `content_base64`, `filename`, `source_path`, `sha256`, `metadata?`, `source_modified_at?`, `job_id?`, `replace_existing?` | 🔑 write | Soumet un job ; réponse immédiate `queued`/`running`/`skipped`/`changed_skipped` |
+| `memory_ingest_batch_async` | `memory_id`, `documents[]`, `replace_existing?`                                                                                        | 🔑 write | Soumet un lot ; renvoie `batch_id` + agrégat (counts + erreurs)                  |
+| `ingest_job_status`         | `job_id`                                                                                                                               | 🔑 read  | Statut, `current_step`, `progress_percent`, entités/relations créées, timestamps |
+| `ingest_job_list`           | `memory_id`, `status?`, `source_path?`, `batch_id?`                                                                                    | 🔑 read  | Liste les jobs (reprise après timeout, par `source_path` ou `batch_id`)          |
+| `ingest_job_cancel`         | `job_id`                                                                                                                               | 🔑 write | Annulation best-effort, sans corrompre le graphe (rollback complet)              |
+
+**Idempotence** : `source_path` (normalisé) est la **clé métier stable**, `sha256` détecte les changements. Même `source_path` + checksum + ingestion réussie → `skipped` ; checksum différent → remplacement explicite (`replace_existing=true`) sinon `changed_skipped`. Une **contrainte d'unicité Neo4j** `(memory_id, source_path)` et un **marqueur durable** `ingestion_status` (passé à `succeeded` uniquement après Qdrant) empêchent doublons et faux `skipped`.
 
 ### 4.3 Recherche et Q&A (4 outils)
 
@@ -374,17 +393,22 @@ Chaque mémoire a sa propre collection Qdrant :
 
 > **Note** : Le graphe est également accessible via l'API REST `GET /api/graph/{id}` (voir §10.3).
 
-### 4.5 Ontologies (1 outil)
+### 4.5 Ontologies (6 outils)
 
-| Outil           | Paramètres | Auth     | Description                                 |
-| --------------- | ---------- | -------- | ------------------------------------------- |
-| `ontology_list` | —          | 🔑 read | Liste les ontologies disponibles avec stats |
+| Outil             | Paramètres                      | Auth      | Description                                          |
+| ----------------- | ------------------------------- | --------- | --------------------------------------------------- |
+| `ontology_list`   | —                               | 🔑 read  | Liste les ontologies disponibles avec stats         |
+| `ontology_get`    | `name`                          | 🔑 read  | Retourne les métadonnées et le YAML d'une ontologie |
+| `ontology_export` | `name`                          | 🔑 read  | Exporte le YAML d'une ontologie                     |
+| `ontology_import` | `name`, `yaml_content`, `overwrite?` | 👑 admin | Importe une nouvelle ontologie YAML           |
+| `ontology_update` | `name`, `yaml_content`          | 👑 admin | Remplace le YAML d'une ontologie existante          |
+| `ontology_delete` | `name`                          | 👑 admin | Supprime une ontologie                              |
 
 ### 4.6 Stockage S3 (2 outils)
 
 | Outil             | Paramètres   | Auth      | Description                                              |
 | ----------------- | ------------ | --------- | -------------------------------------------------------- |
-| `storage_check`   | `memory_id?` | 🔑 read  | Vérifie cohérence graphe ↔ S3 (accessibilité, orphelins) |
+| `storage_check`   | `memory_id?` | 🔑 read  | Cohérence graphe ↔ S3 (orphelins) **+ section `consistency`** : vecteurs Qdrant orphelins/partiels, doublons `source_path`, ingestions partielles |
 | `storage_cleanup` | `dry_run?`   | 🔑 write | Nettoie les fichiers S3 orphelins                        |
 
 ### 4.7 Administration tokens (4 outils)
@@ -798,7 +822,7 @@ Règles :
 
 - Container non-root : `USER mcp` dans le Dockerfile
 - Neo4j/Qdrant sur réseau interne uniquement (pas de ports exposés)
-- Seul le port 8080 (WAF) est accessible de l'extérieur
+- Seul le port 8070 (WAF) est accessible de l'extérieur
 
 ---
 
@@ -880,7 +904,7 @@ backup-{memory_id}-{timestamp}.tar.gz
 
 ### 10.1 Architecture
 
-Accessible via `http://localhost:8080/graph` (à travers le WAF).
+Accessible via `http://localhost:8070/graph` (à travers le WAF).
 
 ```
 graph.html                  — Page principale
@@ -1021,7 +1045,7 @@ token update HASH --email user@example.com
 | :------: | ---------------- | --------------------- | ------------------------------- |
 |    1     | `MCP_URL`        | `MCP_TOKEN`           | Shell export                    |
 |    2     | `MCP_SERVER_URL` | `ADMIN_BOOTSTRAP_KEY` | `.env` via `load_dotenv()`      |
-|    3     | —                | —                     | Défaut: `http://localhost:8080` |
+|    3     | —                | —                     | Défaut: `http://localhost:8070` |
 
 ---
 
@@ -1143,7 +1167,7 @@ cd graph-memory
 cp .env.example .env
 # Éditer .env avec vos credentials
 docker compose up -d
-curl http://localhost:8080/health
+curl http://localhost:8070/health
 ```
 
 ### 14.2 Production
@@ -1157,7 +1181,7 @@ curl http://localhost:8080/health
 - Serveur : `prod-docker02` (192.168.10.21)
 - URL : `https://graph-mem.mcp.cloud-temple.app`
 - TLS : reverse proxy nginx en amont
-- WAF : mode HTTP `:8080`
+- WAF : mode HTTP exposé côté host sur `:8070`
 
 ### 14.3 Mise à jour
 
@@ -1173,7 +1197,7 @@ docker compose up -d mcp-memory
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8070/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN"
       }
@@ -1224,7 +1248,7 @@ graph-memory/
 ├── starter-kit/              # Kit pour créer un nouveau service MCP
 │
 └── src/mcp_memory/           # Code source service
-    ├── server.py             # Serveur MCP + 30 outils
+    ├── server.py             # Serveur MCP + 40 outils
     ├── config.py             # Configuration pydantic-settings
     ├── auth/                 # Authentification
     │   ├── context.py        # ContextVar + check_memory_access
@@ -1257,6 +1281,7 @@ graph-memory/
 - [ ] Ingérer plus de documents juridiques (CGVU, Contrat Cadre, Convention de Services)
 
 ### Moyen terme
+- [x] **Ingestion asynchrone** — API asynchrone, idempotente et observable (jobs queued/running/succeeded/failed/cancelled/skipped, idempotence par `source_path` + `sha256`, batch). **Livré en v3.1.0** : `DESIGN/INGESTION_ASYNCHRONE.md`.
 - [ ] **Git-Sync** — Synchronisation automatique mémoire ↔ dépôt Git (design terminé : `DESIGN/GIT_SYNC_DESIGN.md`)
 - [ ] Export du graphe (Cypher, JSON-LD, RDF)
 - [ ] Diff sémantique CGA/CGV
@@ -1271,5 +1296,5 @@ graph-memory/
 
 ---
 
-*Graph Memory v2.2.0 — Cahier de Spécification — 16 mai 2026*
+*Graph Memory v3.0.0 — Cahier de Spécification — 3 juin 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*

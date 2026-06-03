@@ -351,10 +351,62 @@ class VectorStoreService:
             print(f"❌ [Qdrant] Erreur suppression chunks: {e}", file=sys.stderr)
             raise
     
+    async def count_document_chunks(self, memory_id: str, doc_id: str) -> int:
+        """Compte les chunks Qdrant d'un document (0 si collection absente)."""
+        name = self._collection_name(memory_id)
+        try:
+            res = self._client.count(
+                collection_name=name,
+                count_filter=qmodels.Filter(
+                    must=[qmodels.FieldCondition(key="doc_id", match=qmodels.MatchValue(value=doc_id))]
+                ),
+            )
+            return res.count
+        except UnexpectedResponse as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                return 0  # collection absente = 0 chunk (pas une erreur)
+            raise
+        # Toute autre erreur est PROPAGÉE : renvoyer 0 produirait un faux
+        # "chunks manquants" dans storage_check sur une panne Qdrant transitoire.
+
+    async def list_doc_ids(self, memory_id: str) -> set:
+        """
+        Retourne l'ensemble des doc_id distincts présents dans la collection Qdrant.
+
+        Utilisé par storage_check pour détecter les vecteurs orphelins (chunks
+        Qdrant dont le document n'existe plus dans Neo4j).
+        """
+        name = self._collection_name(memory_id)
+        doc_ids = set()
+        try:
+            offset = None
+            while True:
+                points, next_offset = self._client.scroll(
+                    collection_name=name,
+                    limit=200,
+                    offset=offset,
+                    with_payload=["doc_id"],
+                    with_vectors=False,
+                )
+                for point in points:
+                    did = (point.payload or {}).get("doc_id")
+                    if did:
+                        doc_ids.add(did)
+                if next_offset is None:
+                    break
+                offset = next_offset
+        except UnexpectedResponse as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                return set()  # collection absente = aucun vecteur (pas une erreur)
+            raise
+        # Toute autre erreur (réseau, scroll interrompu) est PROPAGÉE : un set
+        # incomplet produirait de faux orphelins/chunks manquants dans storage_check.
+        return doc_ids
+
     # =========================================================================
     # Export / Import (Backup)
     # =========================================================================
-    
+
     async def export_collection(self, memory_id: str) -> List[dict]:
         """
         Exporte tous les points d'une collection Qdrant pour backup.

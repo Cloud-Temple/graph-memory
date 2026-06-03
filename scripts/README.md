@@ -29,7 +29,7 @@ La CLI utilise deux jeux de variables, par ordre de priorité :
 | **1** (recommandé) | `MCP_URL` | `MCP_TOKEN` | **Variables dédiées CLI** — n'interfèrent pas avec le `.env` serveur |
 | 2 (fallback) | `MCP_SERVER_URL` | `ADMIN_BOOTSTRAP_KEY` | Compatibilité — lues aussi depuis le `.env` local |
 
-**Défaut** : `http://localhost:8080` (URL) et `admin_bootstrap_key_change_me` (token).
+**Défaut** : `http://localhost:8070` (URL) et `admin_bootstrap_key_change_me` (token).
 
 Ou passez-les en options : `--url` et `--token`.
 
@@ -40,7 +40,7 @@ Rien à configurer, ça marche directement :
 
 ```bash
 python scripts/mcp_cli.py health
-# → URL: http://localhost:8080, token lu depuis .env
+# → URL: http://localhost:8070, token lu depuis .env
 ```
 
 ### Usage en production (serveur distant)
@@ -140,6 +140,10 @@ python scripts/mcp_cli.py memory relations JURIDIQUE -t DEFINES
 # Lister les documents d'une mémoire
 python scripts/mcp_cli.py document list JURIDIQUE
 
+# Lire le contenu d'un document
+python scripts/mcp_cli.py document get JURIDIQUE <document_id>
+python scripts/mcp_cli.py document get JURIDIQUE <document_id> --content-format raw -o document-original.bin
+
 # Ingérer un document
 python scripts/mcp_cli.py document ingest JURIDIQUE /path/to/contrat.docx
 
@@ -184,7 +188,7 @@ python scripts/mcp_cli.py storage check JURIDIQUE
 
 # Nettoyer les orphelins S3 (dry run par défaut)
 python scripts/mcp_cli.py storage cleanup
-python scripts/mcp_cli.py storage cleanup -f   # Suppression réelle
+python scripts/mcp_cli.py storage cleanup --confirm   # Suppression réelle
 ```
 
 ### Ontologies
@@ -192,12 +196,20 @@ python scripts/mcp_cli.py storage cleanup -f   # Suppression réelle
 ```bash
 # Lister les ontologies disponibles
 python scripts/mcp_cli.py ontologies
+
+# Gérer les ontologies YAML
+python scripts/mcp_cli.py ontology get legal
+python scripts/mcp_cli.py ontology export legal -o legal.yaml
+python scripts/mcp_cli.py ontology import ./ONTOLOGIES/custom.yaml --overwrite
+python scripts/mcp_cli.py ontology update custom ./ONTOLOGIES/custom.yaml
+python scripts/mcp_cli.py ontology delete custom --confirm
 ```
 
 ### 💾 Backup / Restore
 
 ```bash
 # Créer un backup complet (graphe + vecteurs Qdrant + manifest)
+python scripts/mcp_cli.py backup create
 python scripts/mcp_cli.py backup create JURIDIQUE
 python scripts/mcp_cli.py backup create JURIDIQUE -d "Avant migration v2"
 
@@ -219,7 +231,7 @@ python scripts/mcp_cli.py backup download "JURIDIQUE/2026-02-16T15-33-48" -o bac
 
 # Supprimer un backup
 python scripts/mcp_cli.py backup delete "JURIDIQUE/2026-02-16T15-33-48"
-python scripts/mcp_cli.py backup delete "JURIDIQUE/2026-02-16T15-33-48" -f  # Sans confirmation
+python scripts/mcp_cli.py backup delete "JURIDIQUE/2026-02-16T15-33-48" --confirm  # Sans confirmation
 
 # Restaurer depuis une archive tar.gz locale (cycle complet offline)
 python scripts/mcp_cli.py backup restore-file ./backup-juridique.tar.gz
@@ -319,6 +331,7 @@ Fonctionnalités :
 | Commande           | Description                                                                                                                    |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `docs`             | Lister les documents                                                                                                           |
+| `docget <id>`      | Lire un document (`--raw` pour récupérer le contenu binaire)                                                                   |
 | `ingest <path>`    | Ingérer un fichier (`--force` pour ré-ingérer). Passe automatiquement `source_path` et `source_modified_at`.                   |
 | `ingestdir <path>` | Ingérer un répertoire (`--exclude PATTERN`, `--confirm`, `--force`). Progression temps réel par fichier. Passe `source_path` (relatif) + `source_modified_at` par fichier. |
 | `deldoc <id>`      | Supprimer un document                                                                                                          |
@@ -340,6 +353,11 @@ Fonctionnalités :
 | `check [id]`           | Vérifier cohérence S3/graphe |
 | `cleanup [--confirm]`  | Nettoyer les orphelins S3 (`--force` accepté comme alias) |
 | `ontologies`           | Lister les ontologies        |
+| `ontology-get <name>`  | Afficher le YAML d'une ontologie |
+| `ontology-export <name> [file]` | Exporter une ontologie YAML |
+| `ontology-import <file>` | Importer une ontologie YAML (`--overwrite`) |
+| `ontology-update <name> <file>` | Remplacer le YAML d'une ontologie |
+| `ontology-delete <name>` | Supprimer une ontologie (`--force`, `--confirm`) |
 
 #### 🔑 Tokens
 
@@ -359,7 +377,7 @@ Fonctionnalités :
 
 | Commande                                 | Description                                                      |
 | ---------------------------------------- | ---------------------------------------------------------------- |
-| `backup-create [id] [description]`       | Créer un backup (mémoire courante ou spécifiée)                  |
+| `backup-create [id] [description]`       | Créer un backup (mémoire courante/spécifiée, ou toutes sans id)  |
 | `backup-list [id]`                       | Lister les backups disponibles                                   |
 | `backup-restore <backup_id>`             | Restaurer depuis un backup S3                                    |
 | `backup-download <backup_id> [fichier]`  | Télécharger en tar.gz (`--include-documents` pour offline)       |
@@ -372,6 +390,7 @@ Fonctionnalités :
 
 ```
 🧠 JURIDIQUE: backup-create
+🧠 no memory: backup-create
 🧠 JURIDIQUE: backup-create JURIDIQUE "Avant migration v2"
 🧠 JURIDIQUE: backup-list
 🧠 JURIDIQUE: backup-download JURIDIQUE/2026-02-16T15-33-48 --include-documents
@@ -431,7 +450,7 @@ scripts/
 ├── mcp_cli.py                   # Point d'entrée CLI (Click)
 ├── README.md                    # Ce fichier
 ├── README.en.md                 # Version anglaise
-├── test_recette.py              # Recette complète (136 tests, 7 phases)
+├── test_recette.py              # Recette complète (150+ tests, 7 phases)
 ├── audit_ontology.py            # Audit qualité ontologie sur une mémoire
 ├── check_param_descriptions.py  # Vérification descriptions paramètres MCP
 ├── cli/                         # Package CLI
@@ -596,4 +615,4 @@ refresh_graph_memory.py
 
 ---
 
-*Graph Memory CLI v2.2.0 — Mai 2026*
+*Graph Memory CLI v3.0.0 — Juin 2026*

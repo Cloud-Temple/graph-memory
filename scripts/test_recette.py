@@ -3,8 +3,8 @@
 """
 Recette complète graph-memory — Teste TOUTES les fonctionnalités.
 
-7 phases de tests couvrant les 28 outils MCP :
-  1. Système    : system_health, system_about, ontology_list
+7 phases de tests couvrant les 35 outils MCP :
+  1. Système    : system_health, system_about, ontology list/get/export/import/update/delete, admin UI
   2. Tokens     : CRUD admin, isolation non-admin, promotion admin, chaîne de confiance
   3. Mémoires   : CRUD, auto-ajout au token, isolation multi-tenant
   4. Documents   : ingest, list, get, delete, déduplication SHA-256, isolation
@@ -18,7 +18,7 @@ Recette complète graph-memory — Teste TOUTES les fonctionnalités.
   - Client read-only (restreint à MEMORY_B) — lecture seule
 
 Usage :
-    export MCP_URL=http://localhost:8002
+    export MCP_URL=http://localhost:8070
     export MCP_TOKEN=<admin_bootstrap_key>
     python scripts/test_recette.py
 
@@ -40,6 +40,7 @@ from tests import (  # noqa: E402
 )
 from tests import test_system, test_tokens, test_memories  # noqa: E402
 from tests import test_documents, test_search, test_backup, test_cleanup  # noqa: E402
+from tests import test_ingest_async  # noqa: E402
 
 
 async def setup_tokens(admin: MCPClient) -> dict:
@@ -85,9 +86,9 @@ async def setup_tokens(admin: MCPClient) -> dict:
 async def main():
     """Point d'entrée principal."""
     print("=" * 70)
-    print("🧪 RECETTE COMPLÈTE — Graph Memory v2.0.0")
+    print("🧪 RECETTE COMPLÈTE — Graph Memory v3.1.0")
     print(f"   URL     : {MCP_URL}")
-    print(f"   Phases  : 7 (système, tokens, mémoires, documents, recherche, backup, cleanup)")
+    print(f"   Phases  : 8 (système, tokens, mémoires, documents, ingestion async, recherche, backup, cleanup)")
     print(f"   Profils : admin + read/write + read-only")
     print("=" * 70)
 
@@ -131,6 +132,7 @@ async def main():
         doc_ctx = await test_documents.run(admin, client_rw, client_ro, **ctx)
         if doc_ctx:
             ctx.update(doc_ctx)
+        await test_ingest_async.run(admin, client_rw, client_ro, **ctx)
         await test_search.run(admin, client_rw, client_ro, **ctx)
         await test_backup.run(admin, client_rw, client_ro, **ctx)
         await test_cleanup.run(admin, client_rw, client_ro, **ctx)

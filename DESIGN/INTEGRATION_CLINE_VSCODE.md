@@ -68,7 +68,7 @@ Cline appelle les **outils MCP** de Graph Memory de manière transparente. L'age
 
 ### Côté Graph Memory
 - **Graph Memory déployé** et accessible :
-  - **Local** : `http://localhost:8080` (via Docker Compose)
+  - **Local** : `http://localhost:8070` (via Docker Compose)
   - **Distant** : `https://graph-mem.votre-domaine.com` (production)
 - Un **token d'accès** (Bearer Token) avec les permissions appropriées
 
@@ -76,7 +76,7 @@ Cline appelle les **outils MCP** de Graph Memory de manière transparente. L'age
 
 ```bash
 # Test de santé
-curl http://localhost:8080/health
+curl http://localhost:8070/health
 
 # Réponse attendue :
 # {"status":"healthy","services":{"neo4j":"ok","s3":"ok","llmaas":"ok","qdrant":"ok","embedding":"ok"}}
@@ -113,7 +113,7 @@ Ou utilisez directement la clé `ADMIN_BOOTSTRAP_KEY` du fichier `.env` (accès 
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8070/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN_ICI"
       }
@@ -151,7 +151,7 @@ Le fichier `cline_mcp_settings.json` se trouve typiquement à :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8070/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_BOOTSTRAP_KEY"
       }
@@ -183,7 +183,7 @@ Vous pouvez combiner Graph Memory avec d'autres serveurs MCP :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8070/mcp",
       "headers": {
         "Authorization": "Bearer TOKEN_GRAPH_MEMORY"
       }
@@ -388,8 +388,8 @@ avec l'ontologie legal, puis utilise question_answer pour répondre aux question
 **Solutions** :
 1. Vérifiez que le fichier `cline_mcp_settings.json` est correct (JSON valide)
 2. Redémarrez VS Code après modification de la config
-3. Vérifiez que le serveur est accessible : `curl http://localhost:8080/health`
-4. Testez l'endpoint MCP : `curl -v http://localhost:8080/mcp`
+3. Vérifiez que le serveur est accessible : `curl http://localhost:8070/health`
+4. Testez l'endpoint MCP : `curl -v http://localhost:8070/mcp`
 5. Vérifiez dans Cline : **Cmd+Shift+P** → `Cline: MCP Servers` → le serveur doit apparaître en vert
 
 ### 9.2 Erreur 401 (Unauthorized)
@@ -408,7 +408,7 @@ avec l'ontologie legal, puis utilise question_answer pour répondre aux question
 **Solutions** :
 1. Vérifiez que Docker est lancé : `docker compose ps`
 2. Vérifiez que le WAF est healthy : `docker compose logs waf --tail 10`
-3. Testez l'URL : `curl -v http://localhost:8080/mcp`
+3. Testez l'URL : `curl -v http://localhost:8070/mcp`
 
 ### 9.4 L'ingestion échoue
 
@@ -439,7 +439,7 @@ avec l'ontologie legal, puis utilise question_answer pour répondre aux question
 ```
 1. L'utilisateur pose une question dans le chat Cline
 2. Le LLM de Cline décide d'utiliser un outil MCP (ex: question_answer)
-3. Cline envoie une requête Streamable HTTP à http://localhost:8080/mcp
+3. Cline envoie une requête Streamable HTTP à http://localhost:8070/mcp
    avec le header Authorization: Bearer TOKEN
 4. Le WAF Coraza valide la requête (rate limiting, OWASP CRS)
 5. Le service MCP reçoit l'appel tool
@@ -464,7 +464,7 @@ avec l'ontologie legal, puis utilise question_answer pour répondre aux question
 
 En plus de Cline, vous pouvez visualiser vos graphes via l'interface web :
 
-**http://localhost:8080/graph**
+**http://localhost:8070/graph**
 
 Cette interface permet de :
 - Visualiser le graphe de connaissances interactif

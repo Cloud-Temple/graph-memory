@@ -25,7 +25,7 @@
 #
 # 1. DÉVELOPPEMENT (HTTP, pas de TLS) :
 #    - Laisser SITE_ADDRESS=:8080 dans le .env
-#    - Accès via http://localhost:8080
+#    - Accès via http://localhost:8070
 #
 # 2. PRODUCTION (HTTPS + Let's Encrypt automatique) :
 #    - Mettre SITE_ADDRESS=graph-memory.votre-domaine.com dans le .env
@@ -73,9 +73,9 @@
 	# Les requêtes excédentaires reçoivent HTTP 429 + Retry-After.
 	#
 	# Limites calibrées pour agents IA + trafic server-to-server :
-	# - MCP : 600 req/min (~200 appels MCP, chaque appel = 3 requêtes HTTP)
+	# - MCP : 2000 req/min (~650 appels MCP, chaque appel = 3 requêtes HTTP)
 	#   Nécessaire pour : graph_push de live-memory (delete + re-ingest par fichier)
-	#   et recette de tests (119 tests × 3 req = 357 requêtes en ~30s)
+	#   et recette de tests v3 (150+ contrôles, CRUD admin et ontologies)
 	# - API REST : 60 requêtes/min (interface web)
 	# - Global : 1500 requêtes/min (toutes routes confondues)
 	# =========================================================================
@@ -85,7 +85,7 @@
 				path /mcp*
 			}
 			key {remote_host}
-			events 600
+			events 2000
 			window 1m
 		}
 		zone api {

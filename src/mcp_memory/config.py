@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     extraction_timeout_seconds: int = 600  # 10 min par appel LLM (gros docs avec chain-of-thought)
     s3_upload_timeout_seconds: int = 60
     neo4j_query_timeout_seconds: int = 30
+
+    # =========================================================================
+    # Ingestion asynchrone (file de jobs in-memory best-effort)
+    # =========================================================================
+    ingest_max_history: int = 500          # Nombre max de jobs conservés en mémoire (trim des terminés)
+    ingest_max_queued_per_memory: int = 200  # Jobs en attente max par mémoire (anti-saturation)
+    ingest_max_queued_bytes: int = 300 * 1024 * 1024  # Octets décodés en file (global) avant rejet queue_full
     
     @property
     def llmaas_base_url(self) -> str:

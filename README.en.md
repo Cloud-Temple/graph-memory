@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v2.0.0).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.1.0).
 
-**Latest**: v2.1.2 (May 11, 2026) — Dependency updates (boto3, pydantic-settings, python-multipart, rich). No application changes, acceptance suite still 150/150 green. 30 MCP tools.
+**Latest**: v3.1.0 (June 3, 2026) — Asynchronous, idempotent and observable ingestion: 5 new MCP tools (`memory_ingest_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel`, `memory_ingest_batch_async`), idempotency by `source_path` + `sha256`, durable ingestion marker, and consistent multi-backend deletion.
 
 ---
 
@@ -51,14 +51,14 @@ Question (natural language)
 
 ## ✨ Features
 
-- **30 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
-- **Ontology-guided extraction** — 6 built-in ontologies (legal, cloud, managed-services, presales, general, software-development)
+- **35 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
+- **Ontology-guided extraction** — 7 built-in ontologies (legal, cloud, managed-services, cloud-service-management, presales, general, software-development)
 - **Graph-Guided RAG** — graph identifies relevant docs, then Qdrant searches chunks *within* those docs
 - **Interactive web UI** — vis-network graph visualization, filtering, ASK panel with Markdown rendering
 - **Complete CLI** — Click (scriptable) + interactive shell with autocompletion
 - **Backup/Restore** — full 3-layer backup (Neo4j + Qdrant + S3) with tar.gz archive support
 - **Multi-tenant** — namespace isolation per memory in Neo4j
-- **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.1), admin delegation, rate limiting, non-root container, isolated Docker network, **150 automated tests**
+- **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.1), admin delegation, rate limiting, non-root container, isolated Docker network, **150+ automated checks**
 - **Formats** — PDF, DOCX, Markdown, TXT, HTML, CSV
 
 ---
@@ -73,13 +73,13 @@ Question (natural language)
                          │ Streamable HTTP + Bearer Token
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│         Coraza WAF (Port 8080 — only exposed port)   │
+│         Coraza WAF (Port 8070 — only exposed port)   │
 └────────────────────────┬────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────┐
 │           Graph Memory Service (internal :8002)      │
 │  Auth → Logging → Static Files → MCP Streamable HTTP │
-│  30 MCP tools • 6 ontologies • Graph-Guided RAG      │
+│  35 MCP tools • 7 ontologies • Graph-Guided RAG      │
 └────────────┬───────────┬──────────┬─────────────────┘
              ▼           ▼          ▼
          Neo4j 5    S3 Storage   Qdrant
@@ -103,10 +103,11 @@ cp .env.example .env
 docker compose up -d
 
 # Health check
-curl http://localhost:8080/health
+curl http://localhost:8070/health
 
-# Web UI
-open http://localhost:8080/graph
+# Web UIs
+open http://localhost:8070/graph
+open http://localhost:8070/admin
 ```
 
 ### Required Environment Variables
@@ -132,7 +133,7 @@ open http://localhost:8080/graph
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8070/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN"
       }
@@ -152,7 +153,7 @@ async def example():
     headers = {"Authorization": "Bearer your_token"}
     
     async with streamablehttp_client(
-        "http://localhost:8080/mcp", headers=headers
+        "http://localhost:8070/mcp", headers=headers
     ) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -186,18 +187,20 @@ async def example():
 
 ---
 
-## 🔧 MCP Tools (30)
+## 🔧 MCP Tools (40)
 
 | Category           | Tools                                                                                                          |
 | ------------------ | -------------------------------------------------------------------------------------------------------------- |
 | **Memory CRUD**    | `memory_create`, `memory_update`, `memory_delete`, `memory_list`, `memory_stats`                               |
 | **Ingestion**      | `memory_ingest`                                                                                                |
+| **Async ingestion** | `memory_ingest_async`, `memory_ingest_batch_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel` |
 | **Search & Q&A**   | `memory_search`, `memory_query`, `memory_get_context`, `question_answer`                                       |
 | **Documents**      | `document_list`, `document_get`, `document_delete`                                                             |
 | **Backup/Restore** | `backup_create`, `backup_list`, `backup_restore`, `backup_download`, `backup_delete`, `backup_restore_archive` |
 | **Admin**          | `admin_create_token`, `admin_list_tokens`, `admin_revoke_token`, `admin_update_token`                          |
 | **Diagnostics**    | `system_health`, `system_about`, `system_whoami`, `storage_check`, `storage_cleanup`                           |
-| **Visualization**  | `memory_graph`, `ontology_list`                                                                                |
+| **Ontologies**     | `ontology_list`, `ontology_get`, `ontology_export`, `ontology_import`, `ontology_update`, `ontology_delete`    |
+| **Visualization**  | `memory_graph`                                                                                                 |
 
 ---
 
@@ -210,6 +213,7 @@ Ontologies define the entity types and relation types the LLM should extract. Re
 | `legal`            | 22       | 22        | Legal documents, contracts               |
 | `cloud`            | 27       | 19        | Cloud infrastructure, product sheets     |
 | `managed-services` | 20       | 16        | Managed services, outsourcing            |
+| `cloud-service-management` | 39 | 38        | Managed cloud service operations         |
 | `presales`         | 28       | 30        | Pre-sales, RFP/RFI, proposals            |
 | `general`          | 24       | 22        | Generic: FAQ, certifications, CSR, specs |
 
@@ -227,6 +231,9 @@ pip install httpx click rich prompt_toolkit mcp
 python scripts/mcp_cli.py health
 python scripts/mcp_cli.py memory list
 python scripts/mcp_cli.py document ingest DEMO /path/to/doc.pdf
+python scripts/mcp_cli.py document get DEMO <document_id>
+python scripts/mcp_cli.py ontology get legal
+python scripts/mcp_cli.py backup create        # all memories, admin only
 python scripts/mcp_cli.py ask DEMO "What are the key points?"
 
 # Interactive shell (Tab completion, history, Rich display)
@@ -245,9 +252,9 @@ python scripts/mcp_cli.py health
 
 ## 🔒 Security
 
-- **Coraza WAF** — OWASP CRS, only port 8080 exposed
+- **Coraza WAF** — OWASP CRS, only port 8070 exposed
 - **Bearer Token auth** — required for all MCP and API requests
-- **Rate limiting** — per-IP limits (MCP 60/min, API 30/min, global 200/min)
+- **Rate limiting** — per-IP limits (MCP 2000/min, API 60/min, global 1500/min)
 - **Non-root container** — MCP service runs as user `mcp`
 - **Isolated Docker network** — Neo4j and Qdrant not exposed externally
 - **TLS** — automatic Let's Encrypt in production (`SITE_ADDRESS=your-domain.com`)

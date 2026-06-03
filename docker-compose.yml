@@ -11,7 +11,7 @@
 #
 #   Internet/LAN
 #       │
-#       ▼ :8080 (seul port exposé)
+#       ▼ :8070 (seul port exposé côté host)
 #   ┌──────────┐
 #   │ Coraza   │  WAF OWASP CRS + Reverse Proxy + Security Headers
 #   │ WAF      │
@@ -41,14 +41,14 @@ services:
     container_name: mcp-memory-waf
     ports:
       # --- Mode DEV (HTTP) ---
-      - "${WAF_PORT:-8080}:8080"
+      - "${WAF_PORT:-8070}:8080"
       # --- Mode PROD (HTTPS + Let's Encrypt) ---
       # Décommenter les 2 lignes suivantes et commenter la ligne WAF_PORT ci-dessus :
       # - "80:80"     # Redirect HTTP → HTTPS + challenge ACME Let's Encrypt
       # - "443:443"   # HTTPS (TLS automatique via Let's Encrypt)
     environment:
       # Adresse d'écoute du site :
-      # - Dev  : ":8080"                       (HTTP, pas de TLS)
+      # - Dev  : ":8080"                       (HTTP interne conteneur, exposé via WAF_PORT côté host)
       # - Prod : "graph-memory.mon-domaine.com" (HTTPS automatique Let's Encrypt)
       - SITE_ADDRESS=${SITE_ADDRESS:-:8080}
       # Backend à protéger

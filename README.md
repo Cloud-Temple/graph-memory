@@ -66,9 +66,9 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v1.6.1).
+Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.1.0).
 
-**Dernière version** : v2.2.0 (16 mai 2026) — Submodules Git (`product_sheets` + `docs`), nouveau script `refresh_graph_memory.py` pour synchroniser les fichiers locaux avec Graph Memory en production. 30 outils MCP, 150/150 tests.
+**Dernière version** : v3.1.0 (3 juin 2026) — Ingestion asynchrone, idempotente et observable : 5 nouveaux outils MCP (`memory_ingest_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel`, `memory_ingest_batch_async`), idempotence par `source_path` + `sha256`, marqueur d'ingestion durable et suppression multi-backend cohérente.
 
 ---
 
@@ -127,7 +127,7 @@ Question en langage naturel
 ## ✨ Fonctionnalités
 
 ### Extraction intelligente
-- Extraction d'entités et relations guidée par **ontologie** (6 ontologies : legal, cloud, managed-services, presales, general, software-development)
+- Extraction d'entités et relations guidée par **ontologie** (7 ontologies : legal, cloud, managed-services, cloud-service-management, presales, general, software-development)
 - Support des formats : **PDF, DOCX, Markdown, TXT, HTML, CSV**
 - Déduplication par hash SHA-256 (avec option `--force` pour ré-ingérer)
 - Instructions anti-hub pour éviter les entités trop génériques
@@ -160,8 +160,8 @@ Question en langage naturel
 - Clé bootstrap pour le premier token + **promotion admin déléguée** (v1.6.1)
 - **Isolation multi-tenant durcie** (v1.6.1) : chaque token ne voit/modifie que ses mémoires autorisées
 - Isolation des données par mémoire (namespace Neo4j)
-- **14 contrôles d'accès** sur les 30 outils MCP (access, write, admin)
-- **Recette automatisée** : 150 tests × 3 profils (admin, read/write, read-only)
+- Contrôles d'accès par outil MCP (`read`, `write`, `admin`) avec isolation mémoire côté serveur
+- **Recette automatisée** : 150+ contrôles × 3 profils (admin, read/write, read-only)
 
 ---
 
@@ -175,7 +175,7 @@ Question en langage naturel
                                │ Streamable HTTP + Bearer Token
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│              Coraza WAF (Port 8080 — seul port exposé)               │
+│              Coraza WAF (Port 8070 — seul port exposé)               │
 │  OWASP CRS • CSP • HSTS • X-Frame-Options • Let's Encrypt (prod)     │
 └──────────────────────────────┬───────────────────────────────────────┘
                                │ réseau Docker interne (mcp-network)
@@ -189,15 +189,16 @@ Question en langage naturel
 │  │  • AuthMiddleware (Bearer Token)                               │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  MCP Tools (30 outils)                                         │  │
+│  │  MCP Tools (40 outils)                                         │  │
 │  │  • memory_create/delete/list/stats                             │  │
 │  │  • memory_ingest/search/get_context                            │  │
+│  │  • memory_ingest_async/batch_async + ingest_job_status/list/cancel │
 │  │  • question_answer / memory_query                              │  │
 │  │  • document_list/get/delete                                    │  │
 │  │  • backup_create/list/restore/download/delete/restore_archive  │  │
 │  │  • storage_check/storage_cleanup                               │  │
 │  │  • admin_create_token/list_tokens/revoke_token/update_token    │  │
-│  │  • ontology_list • system_health                               │  │
+│  │  • ontology_list/get/export/import/update/delete • system_*    │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │  Core Services                                                 │  │
@@ -217,7 +218,7 @@ Question en langage naturel
 └───────────┘                        └─────────┘ └──────────┘
 ```
 
-> **Sécurité réseau** : seul le port 8080 (WAF) est exposé. Neo4j, Qdrant et le service MCP ne sont accessibles que via le réseau Docker interne. Le container MCP tourne en utilisateur non-root.
+> **Sécurité réseau** : seul le port 8070 (WAF) est exposé. Neo4j, Qdrant et le service MCP ne sont accessibles que via le réseau Docker interne. Le container MCP tourne en utilisateur non-root.
 
 ---
 
@@ -290,7 +291,7 @@ docker compose up -d
 docker compose ps
 
 # Vérifier la santé (via le WAF)
-curl http://localhost:8080/health
+curl http://localhost:8070/health
 
 # Voir les logs
 docker compose logs mcp-memory -f --tail 50
@@ -301,7 +302,7 @@ docker compose logs waf -f --tail 50
 
 | Service    | Port   | Description                                              |
 | ---------- | ------ | -------------------------------------------------------- |
-| **WAF**    | `8080` | **Seul port exposé** — Coraza WAF → Graph Memory         |
+| **WAF**    | `8070` | **Seul port exposé** — Coraza WAF → Graph Memory         |
 | Neo4j      | —      | Réseau Docker interne uniquement (debug: 127.0.0.1:7475) |
 | Qdrant     | —      | Réseau Docker interne uniquement (debug: 127.0.0.1:6333) |
 | MCP Server | —      | Réseau Docker interne uniquement (debug: 127.0.0.1:8002) |
@@ -312,7 +313,10 @@ docker compose logs waf -f --tail 50
 
 ## 🌐 Interface Web
 
-Accessible à : **http://localhost:8080/graph**
+Interfaces disponibles :
+
+- **Graphe utilisateur** : http://localhost:8070/graph
+- **Console admin** : http://localhost:8070/admin
 
 ### Fonctionnalités
 
@@ -333,6 +337,14 @@ Accessible à : **http://localhost:8080/graph**
 - **Modale paramètres** (⚙️) : ajustez la physique du graphe (distance, répulsion, taille)
 - **Recherche locale** : filtrez les entités par texte dans la sidebar
 - **Bouton Fit** (🔍) : recentre la vue sur tout le graphe
+
+### Console `/admin`
+
+- Dashboard avec statistiques Graph Memory : services, mémoires, documents, entités, relations, ontologies, backups, tokens
+- Modules admin alignés avec le CLI : mémoires, documents, recherche, tokens, backups, stockage et ontologies
+- Gestion des ontologies : import YAML, export, visualisation colorée, édition et suppression
+- Gestion des backups : création par mémoire ou globale, restauration, téléchargement, suppression et restauration depuis archive
+- Résultats JSON/YAML en modales à onglets avec coloration, sans gros blocs inline
 
 ---
 
@@ -355,10 +367,14 @@ python scripts/mcp_cli.py health
 python scripts/mcp_cli.py memory list
 python scripts/mcp_cli.py memory create JURIDIQUE -n "Corpus Juridique" -d "Documents contractuels" -o legal
 python scripts/mcp_cli.py document ingest JURIDIQUE /path/to/contrat.docx
+python scripts/mcp_cli.py document get JURIDIQUE <document_id>
 python scripts/mcp_cli.py ask JURIDIQUE "Quelles sont les conditions de résiliation ?"
 python scripts/mcp_cli.py memory entities JURIDIQUE
 python scripts/mcp_cli.py memory relations JURIDIQUE -t DEFINES
 python scripts/mcp_cli.py ontologies
+python scripts/mcp_cli.py ontology get legal
+python scripts/mcp_cli.py ontology import ./ONTOLOGIES/custom.yaml --overwrite
+python scripts/mcp_cli.py backup create                 # Toutes les mémoires (admin)
 python scripts/mcp_cli.py storage check JURIDIQUE
 ```
 
@@ -372,6 +388,7 @@ mcp> list                          # Lister les mémoires
 mcp> use JURIDIQUE                 # Sélectionner une mémoire
 mcp[JURIDIQUE]> info               # Statistiques
 mcp[JURIDIQUE]> docs               # Lister les documents
+mcp[JURIDIQUE]> docget <document_id> # Lire un document
 mcp[JURIDIQUE]> ingest /path/to/doc.pdf  # Ingérer un document
 mcp[JURIDIQUE]> entities           # Entités par type
 mcp[JURIDIQUE]> entity "Cloud Temple"    # Détail d'une entité
@@ -398,14 +415,20 @@ mcp> exit                          # Quitter
 | Contexte entité    | `memory entity ID NAME`         | `entity NAME`                                     |
 | Relations par type | `memory relations ID [-t TYPE]` | `relations [TYPE]`                                |
 | Lister documents   | `document list ID`              | `docs`                                            |
+| Lire document      | `document get ID DOC`           | `docget DOC`                                      |
 | Ingérer document   | `document ingest ID PATH`       | `ingest PATH`                                     |
 | Supprimer document | `document delete ID DOC`        | `deldoc DOC`                                      |
 | Question/Réponse   | `ask ID "question"`             | `ask question`                                    |
 | Query structuré    | `query ID "question"`           | `query question`                                  |
 | Vérif. stockage S3 | `storage check [ID]`            | `check [ID]`                                      |
 | Nettoyage S3       | `storage cleanup [--confirm]`   | `cleanup [--confirm]`                             |
-| Ontologies dispo.  | `ontologies`                    | `ontologies`                                      |
-| Créer backup       | `backup create ID`              | `backup-create [ID]`                              |
+| Ontologies dispo.  | `ontologies` / `ontology list`  | `ontologies`                                      |
+| Voir ontologie     | `ontology get NAME`             | `ontology-get NAME`                               |
+| Import ontologie   | `ontology import FILE`          | `ontology-import FILE`                            |
+| Export ontologie   | `ontology export NAME`          | `ontology-export NAME [FILE]`                     |
+| Éditer ontologie   | `ontology update NAME FILE`     | `ontology-update NAME FILE`                       |
+| Supprimer onto.    | `ontology delete NAME`          | `ontology-delete NAME`                            |
+| Créer backup       | `backup create [ID]`            | `backup-create [ID]`                              |
 | Lister backups     | `backup list [ID]`              | `backup-list [ID]`                                |
 | Restaurer backup   | `backup restore BACKUP_ID`      | `backup-restore BACKUP_ID`                        |
 | Télécharger backup | `backup download BACKUP_ID`     | `backup-download BACKUP_ID [--include-documents]` |
@@ -416,7 +439,7 @@ mcp> exit                          # Quitter
 
 ## 🔧 Outils MCP
 
-30 outils exposés via le protocole MCP (Streamable HTTP) :
+40 outils exposés via le protocole MCP (Streamable HTTP) :
 
 ### Gestion des mémoires
 
@@ -433,10 +456,22 @@ mcp> exit                          # Quitter
 
 | Outil             | Paramètres                                         | Description                                       |
 | ----------------- | -------------------------------------------------- | ------------------------------------------------- |
-| `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `force` | Ingère un document (S3 + extraction LLM + graphe) |
-| `document_list`   | `memory_id`                                        | Liste les documents d'une mémoire                 |
-| `document_get`    | `memory_id`, `filename`, `include_content`         | Métadonnées d'un document (+ contenu optionnel)   |
-| `document_delete` | `memory_id`, `filename`                            | Supprime un document et ses entités orphelines    |
+| `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `force` | Ingère un document **en synchrone** (S3 + extraction LLM + graphe) |
+| `document_list`   | `memory_id`                                        | Liste les documents (+ `source_path`, `sha256`, `ingestion_status`, job) |
+| `document_get`    | `memory_id`, `document_id`, `include_content`, `content_format` | Métadonnées d'un document (+ contenu optionnel)   |
+| `document_delete` | `memory_id`, `document_id`                         | Supprime un document et ses entités orphelines    |
+
+### Ingestion asynchrone (v3.1.0)
+
+API asynchrone, idempotente et observable : soumission immédiate, extraction en tâche de fond (un worker par mémoire). Idempotence par `source_path` (clé métier) + `sha256`. Voir [`DESIGN/INGESTION_ASYNCHRONE.md`](DESIGN/INGESTION_ASYNCHRONE.md).
+
+| Outil                       | Paramètres                                                                          | Description                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `memory_ingest_async`       | `memory_id`, `content_base64`, `filename`, `source_path`, `sha256`, `replace_existing` | Soumet un job ; réponse immédiate (`queued`/`running`/`skipped`/`changed_skipped`) |
+| `memory_ingest_batch_async` | `memory_id`, `documents[]`, `replace_existing`                                      | Soumet un lot ; renvoie `batch_id` + agrégat (counts + erreurs)   |
+| `ingest_job_status`         | `job_id`                                                                            | Statut, étape, progression %, entités/relations, timestamps       |
+| `ingest_job_list`           | `memory_id`, `status`, `source_path`, `batch_id`                                    | Liste les jobs (reprise après timeout par `source_path`/`batch_id`) |
+| `ingest_job_cancel`         | `job_id`                                                                            | Annulation best-effort (rollback complet, sans orphelin)          |
 
 ### Recherche et Q&A
 
@@ -451,7 +486,12 @@ mcp> exit                          # Quitter
 
 | Outil           | Paramètres | Description                      |
 | --------------- | ---------- | -------------------------------- |
-| `ontology_list` | —          | Liste les ontologies disponibles |
+| `ontology_list`   | —                       | Liste les ontologies disponibles                         |
+| `ontology_get`    | `name`                  | Retourne les métadonnées et le YAML d'une ontologie       |
+| `ontology_export` | `name`                  | Exporte une ontologie en YAML + base64                    |
+| `ontology_import` | `content_yaml`, `overwrite` | Importe une nouvelle ontologie YAML                   |
+| `ontology_update` | `name`, `content_yaml`  | Remplace le YAML d'une ontologie existante                |
+| `ontology_delete` | `name`, `force`         | Supprime une ontologie, avec garde si elle est utilisée   |
 
 ### Stockage S3
 
@@ -464,7 +504,7 @@ mcp> exit                          # Quitter
 
 | Outil                    | Paramètres                       | Description                                                   |
 | ------------------------ | -------------------------------- | ------------------------------------------------------------- |
-| `backup_create`          | `memory_id`, `description`       | Crée un backup complet sur S3 (graphe + vecteurs)             |
+| `backup_create`          | `memory_id` (optionnel), `description` | Crée un backup complet sur S3 (une mémoire ou toutes en admin) |
 | `backup_list`            | `memory_id` (optionnel)          | Liste les backups disponibles avec statistiques               |
 | `backup_restore`         | `backup_id`                      | Restaure depuis un backup S3 (mémoire ne doit pas exister)    |
 | `backup_download`        | `backup_id`, `include_documents` | Télécharge un backup en archive tar.gz (+ docs optionnels)    |
@@ -480,7 +520,7 @@ mcp> exit                          # Quitter
 | `admin_revoke_token` | `token_hash`                          | Révoque un token                                               |
 | `admin_update_token` | `token_hash`, `memory_ids`, `action`  | Modifie les mémoires/permissions/email d'un token              |
 | `system_health`      | —                                     | État de santé des services (Neo4j, S3, LLM, Qdrant, Embedding) |
-| `system_about`       | —                                     | Identité et capacités du service (30 outils, ontologies)        |
+| `system_about`       | —                                     | Identité et capacités du service (40 outils, ontologies)        |
 | `system_whoami`      | —                                     | Identité du token courant (permissions, mémoires, email)        |
 
 ---
@@ -491,15 +531,17 @@ Les ontologies définissent les **types d'entités** et **types de relations** q
 
 ### Ontologies fournies
 
-| Ontologie          | Fichier                            | Entités  | Relations | Usage                                                              |
-| ------------------ | ---------------------------------- | -------- | --------- | ------------------------------------------------------------------ |
-| `legal`            | `ONTOLOGIES/legal.yaml`            | 22 types | 22 types  | Documents juridiques, contrats                                     |
-| `cloud`            | `ONTOLOGIES/cloud.yaml`            | 27 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques             |
-| `managed-services` | `ONTOLOGIES/managed-services.yaml` | 20 types | 16 types  | Services managés, infogérance                                      |
-| `presales`         | `ONTOLOGIES/presales.yaml`         | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales                    |
-| `general`          | `ONTOLOGIES/general.yaml`          | 24 types | 22 types  | Générique : FAQ, référentiels, certifications, RSE, specs produits |
+| Ontologie                  | Fichier                                     | Entités  | Relations | Usage                                                              |
+| -------------------------- | ------------------------------------------- | -------- | --------- | ------------------------------------------------------------------ |
+| `legal`                    | `ONTOLOGIES/legal.yaml`                     | 19 types | 23 types  | Documents juridiques, contrats                                     |
+| `cloud`                    | `ONTOLOGIES/cloud.yaml`                     | 26 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques             |
+| `managed-services`         | `ONTOLOGIES/managed-services.yaml`          | 20 types | 16 types  | Services managés, infogérance                                      |
+| `cloud-service-management` | `ONTOLOGIES/cloud-service-management.yaml`  | 39 types | 38 types  | Exploitation de services cloud managés type LLMaaS, DBaaS, agents  |
+| `presales`                 | `ONTOLOGIES/presales.yaml`                  | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales                    |
+| `general`                  | `ONTOLOGIES/general.yaml`                   | 26 types | 24 types  | Générique : FAQ, référentiels, certifications, RSE, specs produits |
+| `software-development`     | `ONTOLOGIES/software-development.yaml`      | 21 types | 23 types  | Architecture logicielle, APIs, composants, dépendances             |
 
-> Toutes les ontologies utilisent les limites d'extraction `max_entities: 60` / `max_relations: 80`.
+> Les limites d'extraction sont definies par chaque ontologie. Les ontologies generiques restent generalement en `60/80`, tandis que les ontologies plus structurelles peuvent augmenter ces limites (ex. `cloud-service-management` en `100/140`, `software-development` en `160/240`).
 
 ### Format d'une ontologie
 
@@ -565,7 +607,7 @@ En plus du protocole MCP (Streamable HTTP), le service expose une API REST. **To
 ### Exemple : Question/Réponse via API REST
 
 ```bash
-curl -X POST http://localhost:8080/api/ask \
+curl -X POST http://localhost:8070/api/ask \
   -H "Authorization: Bearer VOTRE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -591,7 +633,7 @@ Réponse :
 ### Exemple : Query structuré (sans LLM)
 
 ```bash
-curl -X POST http://localhost:8080/api/query \
+curl -X POST http://localhost:8070/api/query \
   -H "Authorization: Bearer VOTRE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -613,7 +655,7 @@ Ajoutez dans votre configuration MCP :
 {
   "mcpServers": {
     "graph-memory": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8070/mcp",
       "headers": {
         "Authorization": "Bearer VOTRE_TOKEN"
       }
@@ -632,7 +674,7 @@ import base64
 async def exemple():
     headers = {"Authorization": "Bearer votre_token"}
     
-    async with streamablehttp_client("http://localhost:8080/mcp", headers=headers) as (read, write, _):
+    async with streamablehttp_client("http://localhost:8070/mcp", headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             
@@ -679,7 +721,7 @@ async def exemple():
 
 ```bash
 # Créer un token (via la clé bootstrap admin)
-curl -X POST http://localhost:8080/mcp \
+curl -X POST http://localhost:8070/mcp \
   -H "Authorization: Bearer ADMIN_BOOTSTRAP_KEY" \
   # ... appel MCP admin_create_token
 
@@ -695,9 +737,9 @@ Depuis v0.6.6, un **WAF Coraza** (basé sur Caddy) protège le service :
 - **Headers de sécurité** : CSP, X-Frame-Options (DENY), X-Content-Type-Options, Referrer-Policy, Permissions-Policy
 - **Rate Limiting** (depuis v1.1.0) : 
   - SSE : 10 connexions/min (longue durée)
-  - Messages MCP : 60 appels/min (burst autorisé)
-  - API Web : 30 requêtes/min
-  - Global : 200 requêtes/min
+  - MCP : 2000 requêtes/minute (calibré pour la recette complète et les agents)
+  - API Web : 60 requêtes/minute
+  - Global : 1500 requêtes/minute
 - **Container non-root** : le service MCP tourne sous l'utilisateur `mcp` (pas root)
 - **Réseau isolé** : Neo4j et Qdrant ne sont PAS exposés à l'extérieur
 - **TLS automatique** : en production, Caddy obtient et renouvelle les certificats Let's Encrypt
@@ -727,15 +769,17 @@ graph-memory/
 │   └── Caddyfile             # Config OWASP CRS + headers + TLS Let's Encrypt
 │
 ├── ONTOLOGIES/               # Ontologies d'extraction
-│   ├── legal.yaml            # Documents juridiques (22 entités, 22 relations)
-│   ├── cloud.yaml            # Infrastructure cloud (27 entités, 19 relations) [v1.2]
-│   ├── managed-services.yaml # Services managés (20 entités, 16 relations)
-│   ├── presales.yaml         # Avant-vente / RFP (28 entités, 30 relations) [v1.3.0]
-│   └── general.yaml          # Générique : FAQ, certif, RSE, specs (24 entités, 22 relations) [v1.3.6]
+│   ├── legal.yaml                    # Documents juridiques (19 entités, 23 relations)
+│   ├── cloud.yaml                    # Infrastructure cloud (26 entités, 19 relations) [v1.2]
+│   ├── managed-services.yaml         # Services managés (20 entités, 16 relations)
+│   ├── cloud-service-management.yaml # Cloud Service Management (39 entités, 38 relations)
+│   ├── presales.yaml                 # Avant-vente / RFP (28 entités, 30 relations) [v1.1]
+│   ├── software-development.yaml     # Développement logiciel (21 entités, 23 relations) [v1.2]
+│   └── general.yaml                  # Générique : FAQ, certif, RSE, specs (26 entités, 24 relations) [v1.1]
 │
 ├── scripts/                  # CLI et utilitaires
 │   ├── mcp_cli.py            # Point d'entrée CLI (Click + Shell)
-│   ├── test_recette.py       # Recette complète (150 tests, 7 phases, 3 profils)
+│   ├── test_recette.py       # Recette complète (150+ contrôles, 7 phases, 3 profils)
 │   ├── tests/                # Modules de test modulaires (7 fichiers)
 │   ├── README.md             # Documentation CLI
 │   └── cli/                  # Package CLI
@@ -862,7 +906,7 @@ docker compose exec mcp-memory env | grep -E "S3_|LLMAAS_|NEO4J_"
 
 ### Page web blanche
 
-- Accédez à `http://localhost:8080/graph` (pas `/` ni `/static/graph.html`)
+- Accédez à `http://localhost:8070/graph` (pas `/` ni `/static/graph.html`)
 - Faites un **hard refresh** : `Cmd+Shift+R` (Mac) ou `Ctrl+Shift+R` (Windows)
 - Vérifiez les logs : `docker compose logs mcp-memory -f`
 
@@ -888,4 +932,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v2.2.0 — Mai 2026*
+*Graph Memory v3.1.0 — Juin 2026*

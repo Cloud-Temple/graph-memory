@@ -24,7 +24,7 @@ docker compose up -d
 | **1** (recommended) | `MCP_URL` | `MCP_TOKEN` | **Dedicated CLI variables** |
 | 2 (fallback) | `MCP_SERVER_URL` | `ADMIN_BOOTSTRAP_KEY` | Compatibility — also read from local `.env` |
 
-**Defaults**: `http://localhost:8080` (URL) and `admin_bootstrap_key_change_me` (token).
+**Defaults**: `http://localhost:8070` (URL) and `admin_bootstrap_key_change_me` (token).
 
 ```bash
 # Local development (uses .env automatically)
@@ -68,6 +68,7 @@ python scripts/mcp_cli.py document list LEGAL
 python scripts/mcp_cli.py document ingest LEGAL /path/to/contract.docx
 python scripts/mcp_cli.py document ingest LEGAL /path/to/contract.docx -f  # force re-ingest
 python scripts/mcp_cli.py document ingest-dir LEGAL ./docs -e '*.tmp'      # recursive
+python scripts/mcp_cli.py document get LEGAL <document_id>
 python scripts/mcp_cli.py document delete LEGAL <document_id>
 ```
 
@@ -80,17 +81,23 @@ python scripts/mcp_cli.py query LEGAL "data reversibility"   # structured, no LL
 ### Storage & Ontologies
 ```bash
 python scripts/mcp_cli.py storage check LEGAL
-python scripts/mcp_cli.py storage cleanup -f
+python scripts/mcp_cli.py storage cleanup --confirm
 python scripts/mcp_cli.py ontologies
+python scripts/mcp_cli.py ontology get legal
+python scripts/mcp_cli.py ontology export legal -o legal.yaml
+python scripts/mcp_cli.py ontology import ./ONTOLOGIES/custom.yaml --overwrite
+python scripts/mcp_cli.py ontology update custom ./ONTOLOGIES/custom.yaml
+python scripts/mcp_cli.py ontology delete custom --confirm
 ```
 
 ### Backup / Restore
 ```bash
+python scripts/mcp_cli.py backup create                             # all memories, admin only
 python scripts/mcp_cli.py backup create LEGAL -d "Before migration"
 python scripts/mcp_cli.py backup list
 python scripts/mcp_cli.py backup restore "LEGAL/2026-02-16T15-33-48"
 python scripts/mcp_cli.py backup download "LEGAL/2026-02-16T15-33-48" --include-documents
-python scripts/mcp_cli.py backup delete "LEGAL/2026-02-16T15-33-48" -f
+python scripts/mcp_cli.py backup delete "LEGAL/2026-02-16T15-33-48" --confirm
 python scripts/mcp_cli.py backup restore-file ./backup.tar.gz
 ```
 
@@ -125,23 +132,23 @@ python scripts/mcp_cli.py shell
 
 Features: Tab completion, persistent history, `--json` on any read command.
 
-Key commands: `about`, `health`, `whoami`, `list`, `use <id>`, `create <id> <onto>`, `update`, `info`, `graph`, `delete`, `docs`, `ingest <path>`, `ingestdir <path>`, `entities`, `entity <name>`, `relations`, `ask <question>`, `query <question>`, `check`, `cleanup`, `tokens`, `token-create`, `token-revoke`, `token-update`, `backup-create`, `backup-list`, `backup-restore`, `backup-download`, `backup-delete`, `backup-restore-file`.
+Key commands: `about`, `health`, `whoami`, `list`, `use <id>`, `create <id> <onto>`, `update`, `info`, `graph`, `delete`, `docs`, `docget <id>`, `ingest <path>`, `ingestdir <path>`, `entities`, `entity <name>`, `relations`, `ask <question>`, `query <question>`, `check`, `cleanup`, `ontologies`, `ontology-get`, `ontology-export`, `ontology-import`, `ontology-update`, `ontology-delete`, `tokens`, `token-create`, `token-revoke`, `token-update`, `backup-create`, `backup-list`, `backup-restore`, `backup-download`, `backup-delete`, `backup-restore-file`.
 
 ---
 
 ## Testing
 
-Full acceptance test suite (136 tests, 7 phases, 3 token profiles):
+Full acceptance test suite (150+ tests, 7 phases, 3 token profiles):
 
 ```bash
-# Direct connection (bypasses WAF rate limiting)
-export MCP_URL=http://localhost:8002
+# Local WAF endpoint
+export MCP_URL=http://localhost:8070
 export MCP_TOKEN=<admin_bootstrap_key>
 python scripts/test_recette.py
 ```
 
 **Phases tested:**
-1. **System** — system_health, system_about, ontology_list
+1. **System** — system_health, system_about, ontology CRUD, admin UI static checks, CLI/admin parity
 2. **Tokens** — CRUD, admin isolation, admin promotion, trust chain
 3. **Memories** — CRUD, auto-add to token, multi-tenant isolation
 4. **Documents** — ingest, list, get, delete, SHA-256 deduplication, isolation
@@ -158,7 +165,7 @@ scripts/
 ├── mcp_cli.py                   # CLI entry point (Click)
 ├── README.md                    # Full documentation (French)
 ├── README.en.md                 # This file (English summary)
-├── test_recette.py              # Full test suite (136 tests, 7 phases)
+├── test_recette.py              # Full test suite (150+ tests, 7 phases)
 ├── audit_ontology.py            # Ontology quality audit on a memory
 ├── check_param_descriptions.py  # MCP parameter descriptions checker
 ├── cli/                         # CLI package
@@ -205,4 +212,4 @@ pip install httpx click rich prompt_toolkit
 
 ---
 
-*Graph Memory CLI v2.0.1 — March 2026*
+*Graph Memory CLI v3.0.0 — June 2026*
