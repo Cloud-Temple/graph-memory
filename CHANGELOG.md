@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.2.0] - 2026-06-04
+
+### 🧭 `source_path` exposé dans la recherche Graph-first
+
+Permet à un agent (index sémantique opérationnel pour LLMaaS) d'ouvrir immédiatement le fichier Git canonique correspondant à un résultat de recherche, sans détour par `document_list` complet ni recherche locale ambiguë. Design de référence : `DESIGN/PLAN_SOURCE_PATH_RESOLUTION.md` (validé sur 4 passes de revue Codex).
+
+- **`memory_search`** : chaque document lié renvoie désormais `source_path` (chemin source canonique normalisé), `repo_path` (dérivé : préfixe `repo/` retiré), `hash`/`sha256`, `ingestion_status`, `chunk_count`, `last_ingest_job_id`.
+- **`memory_query`** : `source_documents` (contrat complet) **et** `rag_chunks` portent maintenant `source_path` + `repo_path`. Un agent peut donc ouvrir le fichier source directement depuis un chunk RAG.
+- **Enrichissement par jointure graphe rétroactive** : `source_path` reste la source de vérité unique sur le nœud `Document` (Neo4j). Aucune mutation du payload Qdrant, **aucune ré-ingestion** nécessaire — fonctionne immédiatement sur les index existants. Réutilise les métadonnées déjà chargées par le contexte graphe et ne complète par requête (`get_documents_meta`, batch) que les `doc_id` issus du RAG manquants.
+- **Champ dérivé `repo_path`** : `repo/MCO/1.Incidents/x/report.md` → `MCO/1.Incidents/x/report.md`.
+- **Alignement des outils existants** : `document_get` et `document_list` renvoient désormais `source_path` **normalisé** + `repo_path` (contrat canonique homogène sur les 4 outils). `document_get` expose aussi `sha256`, `ingestion_status`, `chunk_count`, `last_ingest_job_id`.
+- **Index Neo4j `(memory_id, id)`** ajouté (créé avant la contrainte d'unicité `source_path`, dans un `try` séparé) pour des lookups documents performants (évite un scan de label).
+- **CLI** : `memory_query` (`show_query_result`) affiche le chemin source dans les chunks RAG (colonne « Source path ») et les documents sources.
+- **Aucun nouvel outil MCP** (toujours 40) : `document_resolve` (batch) a été envisagé puis écarté — `document_get` couvre le mono-document.
+- Robustesse : `source_modified_at` (stocké en string) n'est plus converti via `.isoformat()` ; helper date `_iso()` réservé aux `DateTime` Neo4j. Correctif : `retained` initialisé hors du bloc `try` RAG (plus de `NameError` si la recherche vectorielle échoue).
+- Tests recette : ingestion avec `source_path` `repo/...`, vérification de `source_path`/`repo_path` dans `memory_query` (source_documents + rag_chunks) et `document_get`, cas legacy sans `source_path`.
+
 ## [3.1.1] - 2026-06-03
 
 ### 🖥️ Console `/admin` — page « Ingest Jobs »

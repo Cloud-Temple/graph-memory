@@ -1185,10 +1185,11 @@ async def memory_query(
         # 2. Récupérer le contexte de chaque entité + documents sources
         enriched_entities = []
         source_documents = {}  # doc_id -> {filename, id}
-        
+        meta = {}  # doc_id -> métadonnées enrichies (source_path, repo_path…), source de vérité unique
+
         for entity in entities:
             ctx = await get_graph().get_entity_context(memory_id, entity["name"], depth=1)
-            
+
             # Collecter les documents sources
             entity_docs = []
             for doc in ctx.documents:
@@ -1196,6 +1197,9 @@ async def memory_query(
                     doc_id = doc.get('id', '')
                     doc_filename = doc.get('filename', doc_id)
                     if doc_id:
+                        # get_entity_context renvoie déjà les docs enrichis (source_path…) :
+                        # on alimente la map meta SANS requête supplémentaire.
+                        meta.setdefault(doc_id, doc)
                         if doc_id not in source_documents:
                             source_documents[doc_id] = {
                                 "id": doc_id,
@@ -1231,7 +1235,8 @@ async def memory_query(
         rag_chunks = []
         rag_mode = "graph-guided" if entities else "rag-only"
         rag_chunks_filtered = 0
-        
+        retained = []  # défini hors du try : utilisé plus bas même si le RAG échoue
+
         try:
             graph_doc_ids = list(source_documents.keys())
             query_embedding = await get_embedder().embed_query(query)
@@ -1273,7 +1278,42 @@ async def memory_query(
         
         except Exception as e:
             print(f"⚠️ [Query] Erreur RAG vectoriel: {e}", file=sys.stderr)
-        
+
+        # 3bis. Enrichissement source_path/repo_path par jointure graphe (rétroactif, pas de Qdrant)
+        # meta est déjà alimentée par les docs du graphe (étape 2) : on ne complète QUE les
+        # doc_ids issus du RAG absents de meta (évite un gros IN sur une entité très fréquente).
+        missing = [cr.chunk.doc_id for cr in retained
+                   if cr.chunk.doc_id and cr.chunk.doc_id not in meta]
+        if missing:
+            try:
+                meta.update(await get_graph().get_documents_meta(memory_id, list(set(missing))))
+            except Exception as e:
+                print(f"⚠️ [Query] Enrichissement source_path échoué: {e}", file=sys.stderr)
+        print(f"🧭 [Query] {len(meta)} documents enrichis (source_path)", file=sys.stderr)
+
+        def _doc_fields(m):
+            """Contrat commun de métadonnées document (hash ET sha256 conservés)."""
+            return {
+                "uri": m.get("uri"),
+                "source_path": m.get("source_path"),
+                "repo_path": m.get("repo_path"),
+                "hash": m.get("hash"),
+                "sha256": m.get("sha256"),
+                "ingestion_status": m.get("ingestion_status", "unknown"),
+                "chunk_count": m.get("chunk_count", 0),
+                "last_ingest_job_id": m.get("last_ingest_job_id"),
+            }
+
+        # Enrichir source_documents (contrat complet) — la valeur de meta fait autorité
+        enriched_sources = [{**base, **_doc_fields(meta.get(doc_id, {}))}
+                            for doc_id, base in source_documents.items()]
+
+        # Enrichir rag_chunks (source_path + repo_path suffisent pour ouvrir le fichier Git)
+        for ch in rag_chunks:
+            m = meta.get(ch.get("doc_id"), {})
+            ch["source_path"] = m.get("source_path")
+            ch["repo_path"] = m.get("repo_path")
+
         # 4. Retourner les données structurées (PAS d'appel LLM)
         return {
             "status": "ok",
@@ -1282,7 +1322,7 @@ async def memory_query(
             "retrieval_mode": rag_mode,
             "entities": enriched_entities,
             "rag_chunks": rag_chunks,
-            "source_documents": list(source_documents.values()),
+            "source_documents": enriched_sources,
             "stats": {
                 "entities_found": len(enriched_entities),
                 "rag_chunks_retained": len(rag_chunks),
@@ -1773,12 +1813,17 @@ async def document_get(
                 "filename": doc_info.get("filename"),
                 "uri": doc_info.get("uri"),
                 "hash": doc_info.get("hash"),
+                "sha256": doc_info.get("sha256"),
                 "ingested_at": doc_info.get("ingested_at"),
                 "source_path": doc_info.get("source_path"),
+                "repo_path": doc_info.get("repo_path"),
                 "source_modified_at": doc_info.get("source_modified_at"),
                 "size_bytes": doc_info.get("size_bytes", 0),
                 "text_length": doc_info.get("text_length", 0),
                 "content_type": doc_info.get("content_type"),
+                "ingestion_status": doc_info.get("ingestion_status", "unknown"),
+                "last_ingest_job_id": doc_info.get("last_ingest_job_id"),
+                "chunk_count": doc_info.get("chunk_count", 0),
             },
         }
         

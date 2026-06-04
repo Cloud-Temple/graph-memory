@@ -24,6 +24,23 @@ from .models import (
 )
 
 
+def _iso(v):
+    """Convertit une valeur date Neo4j/Python en string ISO 8601, de façon robuste.
+
+    - neo4j.time.DateTime  → .to_native().isoformat()
+    - datetime natif       → .isoformat()
+    - string (ex: source_modified_at stocké en str) ou autre → str(v)
+    - None                 → None
+    """
+    if v is None:
+        return None
+    if hasattr(v, "to_native"):  # neo4j.time.DateTime
+        return v.to_native().isoformat()
+    if hasattr(v, "isoformat"):  # datetime natif
+        return v.isoformat()
+    return str(v)
+
+
 class GraphService:
     """
     Service de gestion du Knowledge Graph (Neo4j).
@@ -339,6 +356,21 @@ class GraphService:
         normalized = source_path.strip().lstrip("/")
         return normalized or None
 
+    @staticmethod
+    def derive_repo_path(source_path: Optional[str]) -> Optional[str]:
+        """
+        Dérive un chemin relatif au dépôt Git quand le source_path commence par 'repo/'.
+
+        Ex: 'repo/MCO/1.Incidents/x/report.md' → 'MCO/1.Incidents/x/report.md'
+        Sinon (pas de préfixe 'repo/', ou None) → None.
+
+        S'appuie sur le source_path normalisé (cohérence avec la clé métier).
+        """
+        norm = GraphService.normalize_source_path(source_path)
+        if norm and norm.startswith("repo/"):
+            return norm[len("repo/"):] or None
+        return None
+
     async def ensure_document_constraints(self):
         """
         Crée la contrainte d'unicité (memory_id, source_path) sur les documents.
@@ -350,6 +382,21 @@ class GraphService:
         Normalise au passage les anciens source_path == "" en null pour ne pas
         faire échouer la contrainte (Neo4j ignore les propriétés null).
         """
+        # Index (memory_id, id) — créé AVANT la contrainte et dans un try séparé :
+        # des doublons legacy sur source_path peuvent faire échouer la contrainte,
+        # ce qui ne doit PAS empêcher la création de cet index (lookups get_document /
+        # get_documents_meta, sinon scan de tous les Documents de la mémoire).
+        try:
+            async with self.session() as session:
+                await session.run(
+                    """
+                    CREATE INDEX document_memory_id_id IF NOT EXISTS
+                    FOR (d:Document) ON (d.memory_id, d.id)
+                    """
+                )
+        except Exception as e:
+            print(f"⚠️ [Graph] Index (memory_id, id) non créé: {e}", file=sys.stderr)
+
         try:
             async with self.session() as session:
                 # Migration : "" → null (sinon tous les docs legacy violent l'unicité)
@@ -587,32 +634,96 @@ class GraphService:
             result = await session.run(
                 """
                 MATCH (d:Document {id: $doc_id, memory_id: $memory_id})
-                RETURN d.id as id, d.filename as filename, d.uri as uri, 
+                RETURN d.id as id, d.filename as filename, d.uri as uri,
                        d.hash as hash, d.ingested_at as ingested_at,
                        d.source_path as source_path,
                        d.source_modified_at as source_modified_at,
                        d.size_bytes as size_bytes,
                        d.text_length as text_length,
-                       d.content_type as content_type
+                       d.content_type as content_type,
+                       d.ingestion_status as ingestion_status,
+                       d.last_ingest_job_id as last_ingest_job_id,
+                       d.chunk_count as chunk_count
                 """,
                 doc_id=doc_id,
                 memory_id=memory_id
             )
             record = await result.single()
             if record:
+                # source_path renvoyé NORMALISÉ (contrat canonique inter-outils) + repo_path dérivé
+                sp = self.normalize_source_path(record["source_path"])
                 return {
                     "id": record["id"],
                     "filename": record["filename"],
                     "uri": record["uri"],
                     "hash": record["hash"],
+                    "sha256": record["hash"],  # alias métier
                     "ingested_at": record["ingested_at"],
-                    "source_path": record["source_path"] or None,
+                    "source_path": sp,
+                    "repo_path": self.derive_repo_path(sp),
                     "source_modified_at": record["source_modified_at"] or None,
                     "size_bytes": record["size_bytes"] or 0,
                     "text_length": record["text_length"] or 0,
                     "content_type": record["content_type"] or None,
+                    "ingestion_status": record.get("ingestion_status") or "unknown",
+                    "last_ingest_job_id": record.get("last_ingest_job_id"),
+                    "chunk_count": record.get("chunk_count") or 0,
                 }
             return None
+
+    async def get_documents_meta(self, memory_id: str, doc_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Métadonnées de plusieurs documents en une seule requête (clé du dict = doc_id).
+
+        Utilisé par memory_query pour injecter source_path/repo_path/sha256/… dans
+        les rag_chunks et source_documents par jointure sur doc_id, sans toucher au
+        payload Qdrant (rétroactif sur l'index déjà ingéré).
+
+        Les doc_ids absents sont simplement omis du dict (pas d'erreur).
+        S'appuie sur l'index (memory_id, id) créé par ensure_document_constraints.
+        """
+        if not doc_ids:
+            return {}
+        async with self.session() as session:
+            result = await session.run(
+                """
+                MATCH (d:Document {memory_id: $memory_id})
+                WHERE d.id IN $doc_ids
+                RETURN d.id as id, d.filename as filename, d.uri as uri,
+                       d.hash as hash, d.source_path as source_path,
+                       d.source_modified_at as source_modified_at,
+                       d.ingested_at as ingested_at,
+                       d.ingestion_status as ingestion_status,
+                       d.last_ingest_job_id as last_ingest_job_id,
+                       d.chunk_count as chunk_count,
+                       d.size_bytes as size_bytes,
+                       d.text_length as text_length,
+                       d.content_type as content_type
+                """,
+                memory_id=memory_id,
+                doc_ids=list(doc_ids),
+            )
+            out: Dict[str, Dict[str, Any]] = {}
+            async for r in result:
+                sp = self.normalize_source_path(r["source_path"])
+                out[r["id"]] = {
+                    "id": r["id"],
+                    "filename": r["filename"],
+                    "uri": r["uri"],
+                    "hash": r["hash"],
+                    "sha256": r["hash"],  # alias métier
+                    "source_path": sp,
+                    "repo_path": self.derive_repo_path(sp),
+                    "source_modified_at": r["source_modified_at"] or None,  # string → pas de .isoformat()
+                    "ingested_at": _iso(r["ingested_at"]),  # DateTime Neo4j
+                    "ingestion_status": r["ingestion_status"] or "unknown",
+                    "last_ingest_job_id": r["last_ingest_job_id"],
+                    "chunk_count": r["chunk_count"] or 0,
+                    "size_bytes": r["size_bytes"] or 0,
+                    "text_length": r["text_length"] or 0,
+                    "content_type": r["content_type"],
+                }
+            return out
 
     async def delete_document(self, memory_id: str, doc_id: str) -> Dict[str, Any]:
         """
@@ -1109,10 +1220,23 @@ class GraphService:
                 )
             
             entity = record["e"]
-            documents = [
-                {"id": d["id"], "filename": d["filename"], "uri": d["uri"]}
-                for d in record["docs"] if d
-            ]
+            documents = []
+            for d in record["docs"]:
+                if not d:
+                    continue
+                sp = self.normalize_source_path(d.get("source_path"))
+                documents.append({
+                    "id": d["id"],
+                    "filename": d["filename"],
+                    "uri": d["uri"],
+                    "source_path": sp,
+                    "repo_path": self.derive_repo_path(sp),
+                    "hash": d.get("hash"),
+                    "sha256": d.get("hash"),  # alias métier
+                    "ingestion_status": d.get("ingestion_status") or "unknown",
+                    "chunk_count": d.get("chunk_count") or 0,
+                    "last_ingest_job_id": d.get("last_ingest_job_id"),
+                })
             
             related_entities = []
             relations = []
@@ -1214,10 +1338,12 @@ class GraphService:
                     "last_ingest_job_id": record.get("last_ingest_job_id"),
                     "chunk_count": record.get("chunk_count") or 0,
                 }
-                # Ajouter les métadonnées enrichies si présentes
-                source_path = record.get("source_path")
-                if source_path:
-                    doc_entry["source_path"] = source_path
+                # source_path NORMALISÉ (contrat canonique) + repo_path dérivé.
+                # Clés TOUJOURS exposées (None si absent) pour un contrat homogène
+                # avec document_get et memory_query (finding Codex #4).
+                source_path = self.normalize_source_path(record.get("source_path"))
+                doc_entry["source_path"] = source_path
+                doc_entry["repo_path"] = self.derive_repo_path(source_path)
                 source_modified = record.get("source_modified_at")
                 if source_modified:
                     doc_entry["source_modified_at"] = source_modified
