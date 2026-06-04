@@ -68,6 +68,11 @@ def _cli_shell_source() -> str:
     return (repo_root / "scripts/cli/shell.py").read_text(encoding="utf-8")
 
 
+def _cli_display_source() -> str:
+    repo_root = Path(__file__).resolve().parents[2]
+    return (repo_root / "scripts/cli/display.py").read_text(encoding="utf-8")
+
+
 def _assert_admin_ui_actions_are_wired() -> None:
     """Vérifie que chaque bouton data-action dispose d'un handler explicite."""
     source = _admin_app_source()
@@ -307,8 +312,23 @@ def _assert_cli_and_admin_stay_in_sync() -> None:
     cli_py = _cli_commands_source()
     shell_py = _cli_shell_source()
     server_py = _server_source()
+    display_py = _cli_display_source()
 
     checks = {
+        # v3.2.0 — source_path/repo_path doit être rendu lisiblement dans /admin ET le CLI
+        "source_path query rendering admin": (
+            "function querySummaryHtml" in admin_js
+            and "repo_path" in admin_js
+            and "source_path" in admin_js
+            # Anti-régression : le score doit être formaté de façon défensive (pas de .toFixed sur null)
+            and "Number.isFinite" in admin_js
+            and "c.score.toFixed" not in admin_js
+        ),
+        "source_path query rendering CLI": (
+            "repo_path" in display_py
+            and "source_path" in display_py
+            and "Source path" in display_py
+        ),
         "serveur ontologies CRUD": all(
             f"async def {tool}(" in server_py
             for tool in ["ontology_get", "ontology_export", "ontology_import", "ontology_update", "ontology_delete"]

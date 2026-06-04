@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 3.1.1 | **Date** : 3 juin 2026
+> **Version** : 3.2.0 | **Date** : 4 juin 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 
@@ -354,8 +354,8 @@ Chaque mémoire a sa propre collection Qdrant :
 | Outil             | Paramètres                                                                                              | Auth      | Description                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------- |
 | `memory_ingest`   | `memory_id`, `content_base64`, `filename`, `metadata?`, `force?`, `source_path?`, `source_modified_at?` | 🔑 write | Ingère un document **en synchrone** : S3 + LLM extraction + Neo4j + Qdrant |
-| `document_list`   | `memory_id`                                                                                             | 🔑 read  | Liste les documents + `source_path`, `sha256`, `ingestion_status`, `last_ingest_job_id` |
-| `document_get`    | `memory_id`, `document_id`, `include_content?`, `content_format?`                                       | 🔑 read  | Métadonnées (+ contenu si `include_content=true`). `content_format="text"` (défaut) = texte extrait, `"raw"` = base64 original |
+| `document_list`   | `memory_id`                                                                                             | 🔑 read  | Liste les documents + `source_path` (normalisé), `repo_path`, `sha256`, `ingestion_status`, `last_ingest_job_id` |
+| `document_get`    | `memory_id`, `document_id`, `include_content?`, `content_format?`                                       | 🔑 read  | Métadonnées (+ `source_path` normalisé, `repo_path`, `sha256`, `ingestion_status`, `chunk_count`) (+ contenu si `include_content=true`). `content_format="text"` (défaut) = texte extrait, `"raw"` = base64 original |
 | `document_delete` | `memory_id`, `document_id`                                                                              | 🔑 write | Supprime doc + entités orphelines + chunks Qdrant + fichier S3 (`partial_deleted` si un backend échoue) |
 
 ### 4.2.1 Ingestion asynchrone (5 outils) — v3.1.0
@@ -376,14 +376,16 @@ API d'ingestion **asynchrone, idempotente et observable** : le client soumet et 
 
 | Outil                | Paramètres                        | Auth     | Description                                                 |
 | -------------------- | --------------------------------- | -------- | ----------------------------------------------------------- |
-| `memory_search`      | `memory_id`, `query`, `limit?`    | 🔑 read | Recherche d'entités dans le graphe (fulltext)               |
+| `memory_search`      | `memory_id`, `query`, `limit?`    | 🔑 read | Recherche d'entités dans le graphe (fulltext) ; docs liés avec `source_path`/`repo_path` |
 | `memory_get_context` | `memory_id`, `entity_name`        | 🔑 read | Contexte complet d'une entité (voisins, docs, relations)    |
 | `question_answer`    | `memory_id`, `question`, `limit?` | 🔑 read | Question LN → réponse LLM avec Graph-Guided RAG + citations |
-| `memory_query`       | `memory_id`, `query`, `limit?`    | 🔑 read | Données structurées brutes sans LLM (pour agents IA)        |
+| `memory_query`       | `memory_id`, `query`, `limit?`    | 🔑 read | Données structurées brutes sans LLM ; `source_documents` + `rag_chunks` avec `source_path`/`repo_path` |
 
 **Différence `question_answer` vs `memory_query`** :
 - `question_answer` : appelle le LLM pour générer une réponse en langage naturel avec citations
 - `memory_query` : même pipeline de recherche (graphe + RAG) mais retourne les données brutes (entités enrichies, chunks RAG avec scores, documents sources) — idéal pour les agents qui construisent leur propre réponse
+
+**Enrichissement `source_path` / `repo_path` (v3.2.0)** : `memory_search` (documents liés), `memory_query` (`source_documents` **et** `rag_chunks`), `document_get` et `document_list` renvoient le chemin source canonique **normalisé** `source_path` et un `repo_path` dérivé (préfixe `repo/` retiré), permettant à un agent d'ouvrir directement le fichier Git sans `document_list` complet. L'enrichissement se fait par **jointure graphe rétroactive** (source de vérité = nœud `Document` Neo4j, aucune mutation Qdrant, aucune ré-ingestion) via `get_documents_meta` (batch, index `(memory_id, id)`). Contrat de champs commun : `id`, `filename`, `uri`, `source_path`, `repo_path`, `hash`, `sha256`, `ingestion_status`, `chunk_count`, `last_ingest_job_id`.
 
 ### 4.4 Graphe (1 outil)
 
@@ -1282,6 +1284,7 @@ graph-memory/
 
 ### Moyen terme
 - [x] **Ingestion asynchrone** — API asynchrone, idempotente et observable (jobs queued/running/succeeded/failed/cancelled/skipped, idempotence par `source_path` + `sha256`, batch). **Livré en v3.1.0** : `DESIGN/INGESTION_ASYNCHRONE.md`.
+- [x] **`source_path` dans la recherche Graph-first** — `memory_search`/`memory_query` exposent `source_path` + `repo_path` (ouverture directe du fichier Git en incident), jointure graphe rétroactive. **Livré en v3.2.0** : `DESIGN/PLAN_SOURCE_PATH_RESOLUTION.md`.
 - [ ] **Git-Sync** — Synchronisation automatique mémoire ↔ dépôt Git (design terminé : `DESIGN/GIT_SYNC_DESIGN.md`)
 - [ ] Export du graphe (Cypher, JSON-LD, RDF)
 - [ ] Diff sémantique CGA/CGV

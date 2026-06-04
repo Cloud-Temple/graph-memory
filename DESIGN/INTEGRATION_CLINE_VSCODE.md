@@ -306,7 +306,7 @@ Cline : 3 backups trouvés : [tableau avec dates, stats, tailles]
 
 ---
 
-## 7. Les 30 outils à disposition
+## 7. Les 40 outils à disposition
 
 Cline a accès à tous ces outils. Il choisit automatiquement le bon outil selon votre demande.
 
@@ -314,9 +314,10 @@ Cline a accès à tous ces outils. Il choisit automatiquement le bon outil selon
 |-----------|--------|---------------------------|
 | **Mémoires** (5) | `memory_create`, `memory_update`, `memory_delete`, `memory_list`, `memory_stats` | "Crée une mémoire", "Renomme JURIDIQUE", "Stats de DOCS" |
 | **Documents** (4) | `memory_ingest`, `document_list`, `document_get`, `document_delete` | "Ingère ce fichier", "Liste les documents", "Supprime ce doc" |
+| **Ingestion async** (5) | `memory_ingest_async`, `memory_ingest_batch_async`, `ingest_job_status`, `ingest_job_list`, `ingest_job_cancel` | "Ingère ce lot en tâche de fond", "Statut du job", "Annule le job" |
 | **Recherche/Q&A** (4) | `memory_search`, `memory_get_context`, `question_answer`, `memory_query` | "Cherche X", "Contexte de Y", "Question sur Z" |
 | **Graphe** (1) | `memory_graph` | "Montre le graphe complet de JURIDIQUE" |
-| **Ontologies** (1) | `ontology_list` | "Quelles ontologies sont disponibles ?" |
+| **Ontologies** (6) | `ontology_list`, `ontology_get`, `ontology_export`, `ontology_import`, `ontology_update`, `ontology_delete` | "Quelles ontologies ?", "Exporte/édite l'ontologie" |
 | **Stockage** (2) | `storage_check`, `storage_cleanup` | "Vérifie la cohérence", "Nettoie les orphelins" |
 | **Backup** (6) | `backup_create`, `backup_list`, `backup_restore`, `backup_download`, `backup_delete`, `backup_restore_archive` | "Sauvegarde JURIDIQUE", "Restaure ce backup" |
 | **Admin** (4) | `admin_create_token`, `admin_list_tokens`, `admin_revoke_token`, `admin_update_token` | "Crée un token read-only", "Liste les tokens" |
@@ -328,6 +329,32 @@ Cline a accès à tous ces outils. Il choisit automatiquement le bon outil selon
 - **`memory_ingest`** — Ingérez des documents (PDF, DOCX, MD, TXT, HTML, CSV)
 - **`memory_search`** — Cherchez des entités dans le graphe
 - **`memory_query`** — Obtenez des données structurées (pour chaîner avec d'autres outils)
+
+### Ouvrir directement le fichier source (`source_path` / `repo_path`) — v3.2.0
+
+Pour un agent opérationnel (ex. diagnostic d'incident), `memory_search` et `memory_query` renvoient désormais, pour **chaque document et chaque chunk RAG**, le chemin source canonique du fichier :
+
+- **`source_path`** — chemin source normalisé tel qu'ingéré (ex. `repo/MCO/1.Incidents/inc-…/report.md`).
+- **`repo_path`** — chemin relatif au dépôt Git, dérivé quand `source_path` commence par `repo/` (ex. `MCO/1.Incidents/inc-…/report.md`). `null` sinon.
+
+```jsonc
+// extrait d'une réponse memory_query
+{
+  "source_documents": [
+    { "id": "…", "filename": "report.md",
+      "source_path": "repo/MCO/1.Incidents/inc-…/report.md",
+      "repo_path": "MCO/1.Incidents/inc-…/report.md",
+      "sha256": "…", "ingestion_status": "succeeded" }
+  ],
+  "rag_chunks": [
+    { "doc_id": "…", "filename": "report.md", "score": 0.69,
+      "source_path": "repo/MCO/1.Incidents/inc-…/report.md",
+      "repo_path": "MCO/1.Incidents/inc-…/report.md" }
+  ]
+}
+```
+
+**Workflow recommandé en incident** : `memory_query` → lire `repo_path`/`source_path` dans le résultat → ouvrir immédiatement le fichier Git canonique, **sans** `document_list` complet ni `rg` local approximatif. Les mêmes champs sont exposés par `document_get` et `document_list`, et affichés dans la console `/admin` (Ask & Query) comme dans le CLI `mcp_cli`.
 
 ---
 

@@ -217,6 +217,8 @@ select.form-input option { background: var(--bg-input); }
 
 .text-muted { color: #666; }
 .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+.result-section-title { margin: 1rem 0 .4rem; font-size: .8rem; color: var(--accent); font-weight: 600; }
+.result-summary-table thead th { width: auto; }
 .warning { color: var(--warn); font-weight: 600; margin-bottom: .8rem; }
 
 @media (max-width: 760px) {

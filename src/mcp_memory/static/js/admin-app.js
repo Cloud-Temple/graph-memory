@@ -66,9 +66,45 @@ function resultSummaryRows(result) {
         .join('');
 }
 
+function querySummaryHtml(result) {
+    // Rendu dédié des résultats memory_query : expose source_path / repo_path
+    // (chemin Git canonique) pour aligner /admin sur le CLI mcp_cli.
+    if (!result || (!Array.isArray(result.rag_chunks) && !Array.isArray(result.source_documents))) return '';
+    const canonicalPath = (o) => o && (o.repo_path || o.source_path) || '';
+    let html = '';
+
+    const docs = Array.isArray(result.source_documents) ? result.source_documents : [];
+    if (docs.length) {
+        const rows = docs.map(d => {
+            const path = canonicalPath(d);
+            const status = d.ingestion_status && d.ingestion_status !== 'unknown' ? d.ingestion_status : '';
+            return `<tr><td>${esc(d.filename || '?')}</td><td class="mono">${esc(path || '—')}</td><td>${esc(status)}</td></tr>`;
+        }).join('');
+        html += `<h4 class="result-section-title">📄 Documents sources (${docs.length})</h4>`
+            + `<table class="result-summary-table"><thead><tr><th>Fichier</th><th>source_path / repo_path</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    const chunks = Array.isArray(result.rag_chunks) ? result.rag_chunks : [];
+    if (chunks.length) {
+        const rows = chunks.map((c, i) => {
+            const section = c.section_title || c.article_number || '—';
+            const path = canonicalPath(c);
+            const scoreNum = (c.score === null || c.score === undefined) ? NaN : Number(c.score);
+            const score = Number.isFinite(scoreNum) ? scoreNum.toFixed(4) : '—';
+            return `<tr><td>${i + 1}</td><td>${esc(score)}</td>`
+                + `<td>${esc(section)}</td><td>${esc(c.filename || '?')}</td><td class="mono">${esc(path || '—')}</td></tr>`;
+        }).join('');
+        html += `<h4 class="result-section-title">📎 Chunks RAG (${chunks.length})</h4>`
+            + `<table class="result-summary-table"><thead><tr><th>#</th><th>Score</th><th>Section</th><th>Document</th><th>source_path / repo_path</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    return html;
+}
+
 function resultSummaryHtml(result) {
     const rows = resultSummaryRows(result);
-    if (rows) return `<table class="result-summary-table"><tbody>${rows}</tbody></table>`;
+    const query = querySummaryHtml(result);
+    const base = rows ? `<table class="result-summary-table"><tbody>${rows}</tbody></table>` : '';
+    if (base || query) return base + query;
     return '<div class="empty compact">No compact summary available.</div>';
 }
 

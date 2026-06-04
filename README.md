@@ -66,9 +66,9 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.1.1).
+Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.2.0).
 
-**Dernière version** : v3.1.1 (3 juin 2026) — Console `/admin` : page « ⚡ Ingest Jobs » (suivi temps réel des jobs d'ingestion asynchrone, annulation, soumission async navigateur). S'appuie sur la v3.1.0 (ingestion asynchrone, idempotente et observable : 5 outils MCP, idempotence par `source_path` + `sha256`, marqueur durable, suppression multi-backend cohérente).
+**Dernière version** : v3.2.0 (4 juin 2026) — `source_path` exposé dans la recherche Graph-first : `memory_search` et `memory_query` renvoient désormais le chemin source canonique (`source_path`) et un `repo_path` dérivé pour chaque document/chunk, permettant à un agent d'ouvrir immédiatement le fichier Git sans `document_list` complet. Enrichissement par jointure graphe rétroactive (aucune ré-ingestion). Outils `document_get`/`document_list` alignés. Précédemment : v3.1.1 (console `/admin` « ⚡ Ingest Jobs »).
 
 ---
 
@@ -932,4 +932,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v3.1.1 — Juin 2026*
+*Graph Memory v3.2.0 — Juin 2026*

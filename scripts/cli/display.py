@@ -747,28 +747,39 @@ def show_query_result(result: dict):
         table = Table(title=f"📎 Chunks RAG ({len(rag_chunks)})", show_header=True, show_lines=True)
         table.add_column("#", style="dim", width=3)
         table.add_column("Score", style="green", width=7)
-        table.add_column("Section", style="yellow", max_width=25)
-        table.add_column("Document", style="cyan", max_width=20)
-        table.add_column("Extrait", style="white", max_width=50)
-        
+        table.add_column("Section", style="yellow", max_width=22)
+        table.add_column("Document", style="cyan", max_width=18)
+        table.add_column("Source path", style="magenta", max_width=42)
+        table.add_column("Extrait", style="white", max_width=40)
+
         for i, chunk in enumerate(rag_chunks, 1):
             section = chunk.get("section_title") or chunk.get("article_number") or "-"
             preview = (chunk.get("text", "")[:80]).replace("\n", " ").strip()
+            # Chemin canonique pour ouvrir le fichier Git : repo_path si dispo, sinon source_path
+            path = chunk.get("repo_path") or chunk.get("source_path") or "-"
             table.add_row(
                 str(i),
                 f"{chunk.get('score', 0):.4f}",
-                section[:25],
-                chunk.get("filename", "?")[:20],
+                section[:22],
+                chunk.get("filename", "?")[:18],
+                str(path),
                 preview + ("…" if len(chunk.get("text", "")) > 80 else ""),
             )
         console.print(table)
-    
+
     # --- Documents sources ---
     source_docs = result.get("source_documents", [])
     if source_docs:
         console.print(f"\n[bold]📄 Documents sources ({len(source_docs)}):[/bold]")
         for doc in source_docs:
-            console.print(f"  • [cyan]{doc.get('filename', '?')}[/cyan]  [dim]({doc.get('id', '?')[:8]}…)[/dim]")
+            path = doc.get("repo_path") or doc.get("source_path")
+            path_str = f"  [magenta]{path}[/magenta]" if path else ""
+            status = doc.get("ingestion_status")
+            status_str = f"  [dim]{status}[/dim]" if status and status != "unknown" else ""
+            console.print(
+                f"  • [cyan]{doc.get('filename', '?')}[/cyan]  [dim]({doc.get('id', '?')[:8]}…)[/dim]"
+                f"{path_str}{status_str}"
+            )
 
 
 def show_backup_result(result: dict):
