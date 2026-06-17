@@ -46,7 +46,7 @@ pypdf>=3.0.0             # Lecture fichiers PDF
 beautifulsoup4>=4.12.0
 
 # === CLI ===
-click>=8.0.0              # Framework CLI
+click>=8.3.3              # Framework CLI
 rich>=15.0.0              # Affichage CLI (tableaux, spinners, couleurs)
 aiohttp>=3.9.0            # Client HTTP async pour le CLI
 
