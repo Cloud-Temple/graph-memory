@@ -1,0 +1,389 @@
+# =============================================================================
+# Ontologie Cloud Management Platform
+# =============================================================================
+# Cartographie CONCEPTUELLE de la CONSOLE Cloud Temple = la Cloud Management
+# Platform (CMP) - et NON de la "plateforme Cloud Temple" au sens large
+# de l'offre cloud. Le sujet modelise est la Console et les microservices
+# qu'elle regroupe et expose.
+# A mi-chemin entre architecture microservices et vision produit :
+# un microservice est realise par un produit, s'appuie sur un ou plusieurs
+# outils sous-jacents (VMware, XCP-ng/XOA, OpenIaaS, stockage objet S3,
+# moteurs de base de donnees...), qui exposent des capacites techniques
+# soumises a des contraintes propres a chaque outil.
+#
+# NIVEAU : type-level / conceptuel. On ne modelise PAS le deploiement
+# (datacenters, regions, zones, environnements, hosts concrets). La portee
+# d'une contrainte est une propriete de la contrainte, pas un lieu.
+#
+# STATUT : v0.1.0 - WIP / DRAFT. Premiere iteration destinee a la relecture.
+# La couche commerciale (Product / ServiceOffering) est PROVISOIRE et reste
+# a qualifier (cf. special_instructions et le corps de la PR).
+
+name: cloud-management-platform
+version: "0.1.0"
+description: |
+  Ontologie de cartographie conceptuelle de la Console Cloud Temple,
+  c'est-a-dire la Cloud Management Platform (CMP) de Cloud Temple - et non la
+  "plateforme Cloud Temple" au sens large de l'offre cloud. (Console = CMP.)
+  Elle modelise les microservices regroupes par la Console, les produits qui
+  les exposent, les outils sous-jacents sur lesquels ils reposent, les capacites
+  techniques de ces outils, et surtout les CONTRAINTES TECHNIQUES propres a
+  chaque outil (ex. pas de live migration entre datacenters sur VMware).
+
+  Elle est volontairement conceptuelle : aucun fait de deploiement
+  (datacenter, region, zone, environnement, host) n'est extrait. L'objectif
+  est une carte d'architecture interrogeable, extensible dans le temps a de
+  nouveaux outils et de nouvelles contraintes.
+
+context: |
+  Tu es un architecte de plateforme cloud senior. Tu construis une carte
+  CONCEPTUELLE de la Console Cloud Temple (= la Cloud Management Platform, CMP),
+  pas une vue d'exploitation - et non de la "plateforme Cloud Temple" au sens
+  large de l'offre cloud.
+
+  Tu dois identifier avec precision :
+  - Les microservices regroupes par la Console (unites logicielles), leurs
+    interconnexions et leurs dependances fortes.
+  - Les produits commercialises qui exposent ces microservices.
+  - Les outils / technologies sous-jacents NOMMES sur lesquels reposent les
+    microservices (VMware, XCP-ng, Xen Orchestra / XOA, OpenIaaS, stockage
+    objet S3, moteurs de base de donnees, hyperviseurs...).
+  - Les capacites techniques fournies par ces outils (live migration,
+    snapshot, replication, thin provisioning...).
+  - Les contraintes techniques propres a chaque outil, qui limitent une
+    capacite (ex. vMotion limite a un seul datacenter).
+  - Les editeurs / fournisseurs de ces outils.
+
+  IMPORTANT :
+  - NIVEAU CONCEPTUEL UNIQUEMENT. N'extrais aucun datacenter, region, zone,
+    environnement (prod/preprod), host, VM, serveur concret ni adresse IP.
+  - Un microservice peut s'appuyer sur PLUSIEURS outils a la fois
+    (ex. Compute IaaS sur VMware ET OpenIaaS).
+  - Une contrainte technique appartient TOUJOURS a un outil, jamais
+    directement a un microservice.
+  - Ne cree jamais de type "Other". Utilise le type le plus proche.
+
+entity_types:
+  # --- Couche logicielle / produit ---
+  - name: Microservice
+    description: >-
+      Unite logicielle de la plateforme (un microservice equivaut
+      approximativement a un produit). Brique fonctionnelle autonome.
+    priority: high
+    examples:
+      - "Compute IaaS (microservice)"
+      - "Object Storage S3 (microservice)"
+      - "Backup as a Service (microservice)"
+
+  - name: Product
+    description: >-
+      Produit commercialise par Cloud Temple, expose par un ou plusieurs
+      microservices. COUCHE COMMERCIALE PROVISOIRE - a qualifier.
+    priority: high
+    examples:
+      - "Compute IaaS"
+      - "Stockage Objet S3"
+      - "Backup manage"
+
+  - name: ServiceOffering
+    description: >-
+      Offre, tier, plan ou variante commerciale d'un produit.
+      COUCHE COMMERCIALE PROVISOIRE - a qualifier.
+    examples:
+      - "Compute IaaS Standard"
+      - "Compute IaaS Dedie"
+      - "Stockage Objet - classe Archive"
+
+  - name: CloudService
+    description: >-
+      La Console Cloud Temple, c'est-a-dire la Cloud Management Platform (CMP) :
+      l'ombrelle qui regroupe et expose les microservices. NB : c'est bien la
+      Console (Console = CMP), pas la "plateforme Cloud Temple" au sens large.
+    examples:
+      - "Console Cloud Temple"
+      - "Cloud Management Platform (CMP)"
+      - "Portail self-service"
+
+  - name: APIEndpoint
+    description: >-
+      Interface exposee ou consommee par un microservice (API, console,
+      interface d'administration). Sert a tracer les interconnexions.
+    examples:
+      - "API Compute"
+      - "API Object Storage (S3 compatible)"
+      - "Console d'administration"
+
+  # --- Couche outils sous-jacents ---
+  - name: PlatformTool
+    description: >-
+      Outil ou technologie sous-jacent NOMME sur lequel repose un
+      microservice : hyperviseur, plateforme de virtualisation, stockage
+      objet, moteur de base de donnees, orchestrateur.
+    priority: high
+    examples:
+      - "VMware vSphere"
+      - "XCP-ng"
+      - "Xen Orchestra (XOA)"
+      - "OpenIaaS"
+      - "Stockage objet S3 (Dell ECS)"
+
+  - name: Vendor
+    description: >-
+      Editeur ou fournisseur d'un outil sous-jacent. Permet de tracer la
+      provenance et de regrouper les contraintes par editeur.
+    examples:
+      - "Vates (XCP-ng / XOA)"
+      - "Broadcom (VMware)"
+      - "Dell (ECS)"
+
+  - name: ToolCapability
+    description: >-
+      Capacite / operation technique fournie par un outil, potentiellement
+      contrainte. Modelisee comme une fonction ABSTRAITE partagee entre
+      outils pour permettre la comparaison (ex. plusieurs outils offrent
+      "Live migration").
+    priority: high
+    examples:
+      - "Live migration"
+      - "Snapshot"
+      - "Replication objet"
+
+  - name: TechnicalConstraint
+    description: >-
+      Contrainte / limitation technique propre a un outil, qui restreint une
+      capacite. Entite de plein droit. Le type et la portee sont encodes dans
+      le nom (cf. nommage canonique). N'est JAMAIS posee sur un microservice.
+    priority: high
+    examples:
+      - "Pas de live migration cross-datacenter (technique - portee: cross-datacenter)"
+      - "Snapshot non coherent multi-volumes (technique - portee: instance)"
+      - "Pas de redimensionnement de volume a chaud (technique - portee: instance)"
+
+  # --- Documentation ---
+  - name: Documentation
+    description: >-
+      Renvoi nomme a un document canonique cite dans le texte (fiche produit,
+      RFC, ADR, specification). NB : un document ingere est deja un noeud
+      Document natif ; ce type ne sert qu'aux references textuelles.
+    examples:
+      - "Fiche produit Compute IaaS"
+      - "RFC architecture stockage objet"
+      - "ADR choix hyperviseur"
+
+relation_types:
+  # --- Relations nouvelles (specifiques a cette ontologie) ---
+  - name: REALIZES
+    description: Un microservice realise / materialise un produit commercialise
+    examples:
+      - "Compute IaaS (microservice) -> REALIZES -> Compute IaaS (produit)"
+      - "Object Storage S3 (microservice) -> REALIZES -> Stockage Objet S3"
+
+  - name: BACKED_BY
+    description: >-
+      Un microservice repose sur / est bati sur un outil sous-jacent
+      (socle technique). Peut pointer vers PLUSIEURS outils.
+    examples:
+      - "Compute IaaS (microservice) -> BACKED_BY -> VMware vSphere"
+      - "Compute IaaS (microservice) -> BACKED_BY -> OpenIaaS"
+
+  - name: CONSTRAINS
+    description: Une contrainte technique limite une capacite (ou un outil)
+    examples:
+      - "Pas de live migration cross-datacenter -> CONSTRAINS -> Live migration"
+      - "Snapshot non coherent multi-volumes -> CONSTRAINS -> Snapshot"
+
+  # --- Relations reutilisees (vocabulaire commun aux autres ontologies) ---
+  - name: IMPOSES
+    description: >-
+      Un outil impose une contrainte technique (provenance de la contrainte).
+      Permet d'attribuer une contrainte a l'outil exact, meme quand un
+      microservice s'appuie sur plusieurs outils.
+    examples:
+      - "VMware vSphere -> IMPOSES -> Pas de live migration cross-datacenter"
+      - "Stockage objet S3 (Dell ECS) -> IMPOSES -> Pas de renommage de bucket"
+
+  - name: SUPPORTS
+    description: Un outil fournit / supporte une capacite technique
+    examples:
+      - "VMware vSphere -> SUPPORTS -> Live migration"
+      - "OpenIaaS -> SUPPORTS -> Live migration"
+
+  - name: AFFECTS
+    description: >-
+      Raccourci d'impact : une contrainte affecte un microservice ou un
+      produit (optionnel, sinon deductible par traversee de graphe).
+    examples:
+      - "Pas de live migration cross-datacenter -> AFFECTS -> Compute IaaS (microservice)"
+      - "Snapshot non coherent multi-volumes -> AFFECTS -> Backup as a Service (microservice)"
+
+  - name: DEPENDS_ON
+    description: >-
+      Dependance fonctionnelle forte entre microservices, ou d'un microservice
+      vers un outil quand ce n'est pas un socle (BACKED_BY).
+    examples:
+      - "Backup as a Service (microservice) -> DEPENDS_ON -> Object Storage S3 (microservice)"
+      - "Compute IaaS (microservice) -> DEPENDS_ON -> IAM (microservice)"
+
+  - name: INTEGRATES_WITH
+    description: Interconnexion / integration souple entre deux microservices
+    examples:
+      - "Compute IaaS (microservice) -> INTEGRATES_WITH -> Observabilite (microservice)"
+      - "Object Storage S3 (microservice) -> INTEGRATES_WITH -> Facturation (microservice)"
+
+  - name: PART_OF
+    description: Composition (microservice regroupe par la Console, offre dans un produit)
+    examples:
+      - "Compute IaaS (microservice) -> PART_OF -> Console Cloud Temple"
+      - "Compute IaaS Standard -> PART_OF -> Compute IaaS (produit)"
+
+  - name: EXPOSES
+    description: Un microservice ou un service expose une interface / un endpoint
+    examples:
+      - "Compute IaaS (microservice) -> EXPOSES -> API Compute"
+      - "Object Storage S3 (microservice) -> EXPOSES -> API Object Storage (S3 compatible)"
+
+  - name: CONSUMES
+    description: Un microservice consomme l'interface d'un autre microservice
+    examples:
+      - "Backup as a Service (microservice) -> CONSUMES -> API Object Storage (S3 compatible)"
+      - "Observabilite (microservice) -> CONSUMES -> API Compute"
+
+  - name: PROVIDES
+    description: Un editeur fournit un outil sous-jacent
+    examples:
+      - "Vates (XCP-ng / XOA) -> PROVIDES -> XCP-ng"
+      - "Broadcom (VMware) -> PROVIDES -> VMware vSphere"
+
+  - name: DOCUMENTED_IN
+    description: Un produit ou un microservice est documente dans un document canonique
+    examples:
+      - "Compute IaaS (produit) -> DOCUMENTED_IN -> Fiche produit Compute IaaS"
+      - "Object Storage S3 (microservice) -> DOCUMENTED_IN -> RFC architecture stockage objet"
+
+extraction_rules:
+  max_entities: 60
+  max_relations: 80
+  include_metrics: false
+  include_durations: false
+  include_amounts: false
+  extract_implicit_relations: true
+
+  priority_entities:
+    - Microservice
+    - PlatformTool
+    - ToolCapability
+    - TechnicalConstraint
+    - Product
+
+  special_instructions: |
+    # --- OBJECTIF D'EXTRACTION ---
+    - Construis une carte CONCEPTUELLE de la plateforme : microservices,
+      produits, outils sous-jacents, capacites et contraintes techniques.
+    - Privilegie les faits structurels et durables, pas l'exploitation.
+
+    # --- NIVEAU CONCEPTUEL (EXCLUSIONS STRICTES) ---
+    - N'extrais AUCUN element de deploiement : datacenter, region, zone de
+      disponibilite, environnement (prod / preprod / staging), host, VM,
+      serveur, cluster physique, adresse IP, nom de machine.
+    - Ces notions, si presentes, ne doivent generer aucune entite.
+
+    # --- NOMMAGE CANONIQUE ---
+    - Microservice : "<Nom> (microservice)". Ex : "Compute IaaS (microservice)".
+    - Product : nom commercial seul. Ex : "Compute IaaS".
+    - CloudService : la Console Cloud Temple = la Cloud Management Platform (CMP).
+      Ex : "Console Cloud Temple". Ne l'appelle JAMAIS "Plateforme Cloud Temple"
+      (le sujet est la Console, pas l'offre cloud au sens large).
+    - PlatformTool : nom officiel de l'outil. Ex : "VMware vSphere", "XCP-ng",
+      "Xen Orchestra (XOA)", "OpenIaaS".
+    - ToolCapability : nom de la fonction, ABSTRAIT et partage entre outils.
+      Ex : "Live migration" (pas "vMotion" ni "XO live migrate" : ce sont des
+      implementations de la meme capacite ; utilise le nom abstrait).
+    - TechnicalConstraint : encode le type et la portee dans le nom, format :
+      "<Libelle court> (<type> - portee: <portee>)".
+      type ∈ {technique}. portee ∈ {instance, intra-datacenter,
+      cross-datacenter, intra-region, cross-region, global}.
+      Ex : "Pas de live migration cross-datacenter (technique - portee: cross-datacenter)".
+
+    # --- MAPPINGS OBLIGATOIRES ---
+    - Tout outil / techno sous-jacent nomme (hyperviseur, virtualisation,
+      stockage objet, moteur de base de donnees, orchestrateur) = PlatformTool.
+      Ne cree pas de type "Technology", "Hypervisor" ou "Software".
+    - Toute operation / fonction technique d'un outil = ToolCapability.
+      Si plusieurs outils offrent la meme fonction, REUTILISE la meme
+      ToolCapability abstraite pour permettre la comparaison entre outils.
+    - Toute limitation / restriction technique d'un outil = TechnicalConstraint.
+    - Tout editeur / fournisseur d'outil = Vendor.
+    - Une unite logicielle = Microservice ; le produit commercialise associe
+      = Product, relie par REALIZES.
+
+    # --- CONTRAINTES : REGLE DE BRANCHEMENT (CRITIQUE) ---
+    - Une TechnicalConstraint se branche TOUJOURS ainsi :
+      * l'outil qui l'impose      : PlatformTool -> IMPOSES -> TechnicalConstraint
+      * la capacite qu'elle limite: TechnicalConstraint -> CONSTRAINS -> ToolCapability
+    - Ne pose JAMAIS une contrainte directement sur un Microservice ou un
+      Product. Un microservice peut s'appuyer sur plusieurs outils
+      (BACKED_BY multiple) ; coller la contrainte sur le microservice rendrait
+      impossible de savoir de quel outil elle vient.
+    - Le raccourci TechnicalConstraint -> AFFECTS -> Microservice/Product est
+      autorise mais optionnel : il reste deductible par traversee
+      Microservice -> BACKED_BY -> PlatformTool -> IMPOSES -> TechnicalConstraint.
+
+    # --- MULTI-OUTIL ---
+    - Un microservice peut avoir plusieurs relations BACKED_BY (ex. VMware ET
+      OpenIaaS). Cree une relation par outil, ne fusionne pas.
+    - Deux outils peuvent SUPPORTS la meme ToolCapability abstraite ; leurs
+      contraintes respectives restent distinctes via IMPOSES.
+
+    # --- ANTI-BRUIT ---
+    - Ne cree pas de hub artificiel : ne relie pas tout a la Console ou a
+      un microservice central. Relie les entites les plus specifiques.
+    - N'extrais pas les details de configuration, flags, chemins, ni les
+      numeros de version, sauf si une version definit precisement une contrainte.
+    - N'extrais pas les entites de deploiement (cf. exclusions ci-dessus).
+
+    # --- RELATIONS INTERDITES OU A EVITER ---
+    - Evite RELATED_TO : choisis toujours une relation specifique.
+    - "repose sur / est bati sur un outil" -> BACKED_BY (socle), sinon
+      DEPENDS_ON (dependance fonctionnelle).
+    - "realise / expose le produit" -> REALIZES.
+    - "limite / empeche / interdit" (contrainte) -> IMPOSES (depuis l'outil)
+      + CONSTRAINS (vers la capacite).
+    - "fournit l'outil" (editeur) -> PROVIDES.
+
+    # --- COUCHE COMMERCIALE : PROVISOIRE / A QUALIFIER ---
+    - Product et ServiceOffering sont une premiere ebauche. Pour l'instant :
+      extrais Product comme le produit commercialise relie a son Microservice
+      par REALIZES, et ServiceOffering uniquement si une variante/tier est
+      explicitement nommee. Ne modelise PAS encore le pricing, les SLA
+      commerciaux ni le cycle de vie commercial : ces aspects seront qualifies
+      dans une iteration ulterieure.
+
+# NB : ce bloc 'examples' est conserve pour la relecture humaine mais n'est
+# PAS injecte dans le prompt d'extraction par build_prompt() (verifie dans
+# src/mcp_memory/core/ontology.py). Ce qui guide reellement le LLM : 'context',
+# les 'examples' de chaque type, et 'special_instructions'.
+examples:
+  - input: |
+      Le microservice Compute IaaS expose le produit du meme nom. Il repose a
+      la fois sur VMware vSphere et sur OpenIaaS. La live migration est
+      supportee par les deux, mais sur VMware elle est limitee a un seul
+      datacenter (pas de vMotion entre datacenters). VMware est edite par
+      Broadcom.
+    output:
+      entities:
+        - {name: "Compute IaaS (microservice)", type: "Microservice"}
+        - {name: "Compute IaaS", type: "Product"}
+        - {name: "VMware vSphere", type: "PlatformTool"}
+        - {name: "OpenIaaS", type: "PlatformTool"}
+        - {name: "Broadcom (VMware)", type: "Vendor"}
+        - {name: "Live migration", type: "ToolCapability"}
+        - {name: "Pas de live migration cross-datacenter (technique - portee: cross-datacenter)", type: "TechnicalConstraint"}
+      relations:
+        - {from: "Compute IaaS (microservice)", to: "Compute IaaS", type: "REALIZES"}
+        - {from: "Compute IaaS (microservice)", to: "VMware vSphere", type: "BACKED_BY"}
+        - {from: "Compute IaaS (microservice)", to: "OpenIaaS", type: "BACKED_BY"}
+        - {from: "VMware vSphere", to: "Live migration", type: "SUPPORTS"}
+        - {from: "OpenIaaS", to: "Live migration", type: "SUPPORTS"}
+        - {from: "Broadcom (VMware)", to: "VMware vSphere", type: "PROVIDES"}
+        - {from: "VMware vSphere", to: "Pas de live migration cross-datacenter (technique - portee: cross-datacenter)", type: "IMPOSES"}
+        - {from: "Pas de live migration cross-datacenter (technique - portee: cross-datacenter)", to: "Live migration", type: "CONSTRAINS"}
