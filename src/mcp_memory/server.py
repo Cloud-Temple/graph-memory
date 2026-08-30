@@ -26,6 +26,7 @@ from .config import get_settings
 from .auth.middleware import AuthMiddleware, LoggingMiddleware, StaticFilesMiddleware
 from .auth.context import check_memory_access, check_write_permission, check_admin_permission, get_allowed_memory_ids, current_auth
 from .core.validators import validate_memory_id, validate_filename, validate_document_size, validate_entity_name, validate_backup_id as validate_backup_id_format, check_bootstrap_key_safety
+from .storage_consistency import collect_referenced_ontology_keys, is_referenced_ontology_key
 
 
 # =============================================================================
@@ -2226,13 +2227,21 @@ async def storage_check(
                 return admin_err
         
         # 1. Récupérer les mémoires à vérifier
+        all_memories = await get_graph().list_memories()
         if memory_id:
-            memory = await get_graph().get_memory(memory_id)
+            memory = next((mem for mem in all_memories if mem.id == memory_id), None)
             if not memory:
                 return {"status": "error", "message": f"Mémoire '{memory_id}' non trouvée"}
             memories = [memory]
         else:
-            memories = await get_graph().list_memories()
+            memories = all_memories
+
+        # Les ontologies ne sont légitimes que si une mémoire existante les
+        # référence. Les mémoires legacy sans ontology_uri sont protégées par
+        # un fallback strict sur leur préfixe et leur nom d'ontologie.
+        referenced_ontology_keys, legacy_ontology_patterns = collect_referenced_ontology_keys(
+            all_memories, get_storage()._parse_key
+        )
         
         # 2. Collecter toutes les URIs des documents référencés dans le graphe
         graph_uris = set()          # URIs référencées dans Neo4j
@@ -2275,7 +2284,6 @@ async def storage_check(
         all_graph_uris = set(graph_uris)  # Commencer avec celles du scope
         if memory_id:
             # Charger les URIs des autres mémoires aussi
-            all_memories = await get_graph().list_memories()
             for mem in all_memories:
                 if mem.id == memory_id:
                     continue  # Déjà chargé
@@ -2310,9 +2318,11 @@ async def storage_check(
             if key.startswith("_backups/"):
                 continue
             
-            # Ignorer les ontologies (fichiers légitimes)
-            # Le pattern est {hash[:8]}__ontology_{name}.yaml (double _ car hash + _ontology)
-            if "_ontology_" in key:
+            # Ignorer uniquement les ontologies encore référencées par une
+            # mémoire existante. Une ontologie de mémoire supprimée est orpheline.
+            if is_referenced_ontology_key(
+                key, referenced_ontology_keys, legacy_ontology_patterns
+            ):
                 continue
             
             # Si la clé n'est pas référencée dans le graphe → orphelin

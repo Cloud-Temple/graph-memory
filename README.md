@@ -66,9 +66,9 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.2.0).
+Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.2.1).
 
-**Dernière version** : v3.2.0 (4 juin 2026) — `source_path` exposé dans la recherche Graph-first : `memory_search` et `memory_query` renvoient désormais le chemin source canonique (`source_path`) et un `repo_path` dérivé pour chaque document/chunk, permettant à un agent d'ouvrir immédiatement le fichier Git sans `document_list` complet. Enrichissement par jointure graphe rétroactive (aucune ré-ingestion). Outils `document_get`/`document_list` alignés. Précédemment : v3.1.1 (console `/admin` « ⚡ Ingest Jobs »).
+**Dernière version** : v3.2.1 (30 août 2026) — `storage_check` et `storage_cleanup` détectent désormais les ontologies S3 devenues orphelines après la suppression d'une mémoire, tout en protégeant les ontologies encore référencées et les mémoires legacy sans `ontology_uri`. Correctif de l'issue [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
 
 ---
 
@@ -932,4 +932,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v3.2.0 — Juin 2026*
+*Graph Memory v3.2.1 — Août 2026*

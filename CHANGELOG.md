@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.2.1] - 2026-08-30
+
+### 🧹 Cleanup des ontologies S3 orphelines
+
+- **`storage_check`** ne considère plus automatiquement tous les objets contenant `_ontology_` comme légitimes : seules les ontologies encore référencées par une mémoire existante sont protégées.
+- **`storage_cleanup`** peut désormais détecter et supprimer les ontologies laissées sur S3 après la suppression d'une mémoire, y compris les copies obsolètes d'une ontologie.
+- **Compatibilité legacy** : les mémoires anciennes sans `ontology_uri` restent protégées par une correspondance stricte sur leur identifiant et leur nom d'ontologie.
+- Correctif de l'issue [#31](https://github.com/Cloud-Temple/graph-memory/issues/31), validé sur Docker local : 5 ontologies orphelines détectées puis supprimées, second contrôle à 0 orphelin.
+
 ## [3.2.0] - 2026-06-04
 
 ### 🧭 `source_path` exposé dans la recherche Graph-first

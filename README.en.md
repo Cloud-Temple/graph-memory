@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.2.0).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.2.1).
 
-**Latest**: v3.2.0 (June 4, 2026) — `source_path` exposed in Graph-first search: `memory_search` and `memory_query` now return the canonical source path (`source_path`) and a derived `repo_path` for every document/chunk, letting an agent open the Git file immediately without a full `document_list`. Enriched via a retroactive graph join (no re-ingestion). `document_get`/`document_list` tools aligned. Previously: v3.1.1 (`/admin` "⚡ Ingest Jobs" console).
+**Latest**: v3.2.1 (August 30, 2026) — `storage_check` and `storage_cleanup` now detect S3 ontology objects orphaned after memory deletion, while preserving ontologies still referenced by existing memories and legacy memories without an `ontology_uri`. Fixes [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Previously: v3.2.0 (`source_path` exposed in Graph-first search).
 
 ---
 
