@@ -1,6 +1,16 @@
 # Changelog
 
-## [3.2.1] - 2026-08-30
+## [3.2.1] - 2026-08-31
+
+### Migration vers MCP Python SDK 2
+
+- **SDK officiel `mcp==2.1.1`** : serveur `MCPServer`, version applicative annoncée à l'initialisation, endpoint `/mcp` et 40 outils métier conservés.
+- **CLI Python** : transport `streamable_http_client` avec `httpx2`, callback public de progression et lecture des résultats SDK 2 ; timeout de lecture de 15 minutes et désactivation des proxies d'environnement conservés.
+- **Console `/admin`** : appels via l'API publique `mcp.call_tool`, validation des arguments et suppression de l'accès au registre privé du SDK.
+- **Gros documents** : limite HTTP explicitement alignée sur les 50 Mio applicatifs encodés en base64, pour éviter la nouvelle limite SDK de 4 Mio.
+- **Dépendances figées** : `requirements.lock` inclut les dépendances transitives et l'outillage Python ; Docker l'installe sans `pip --upgrade` non borné et vérifie les imports SDK 2 au build.
+- Migration interne : pas de changement des paramètres métier ni de migration des données. Les environnements exécutant la CLI Python doivent réinstaller les dépendances.
+- **Validation** : 9 tests ciblés passent sous Python 3.11/Docker (authentification, admin, protocoles legacy/2026, notifications, uploads >4 Mio et limite HTTP), build sans cache réussi, schémas des 40 outils inchangés. La recette complète avec LLM reste à rejouer après résolution des erreurs 401 LLMaaS locales.
 
 ### 🧹 Cleanup des ontologies S3 orphelines
 

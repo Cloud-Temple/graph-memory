@@ -511,27 +511,21 @@ class StaticFilesMiddleware:
             await self._send_json(send, {"status": "error", "message": "Erreur interne /api/tool"}, 500)
 
     async def _call_tool_direct(self, tool_name: str, arguments: dict) -> dict:
-        """Appelle directement un outil enregistré dans FastMCP."""
+        """Appelle l'API publique du SDK, avec validation des arguments et contexte."""
         from ..server import mcp
+        from mcp.server.mcpserver.exceptions import ToolError
 
-        tool_manager = mcp._tool_manager
-        tools = getattr(tool_manager, "_tools", {})
-        if tool_name not in tools:
-            return {"status": "error", "message": f"Outil inconnu: {tool_name}"}
-
-        tool_obj = tools[tool_name]
-        fn = None
-        for attr in ("fn", "func", "handler", "_fn", "run", "callback"):
-            candidate = getattr(tool_obj, attr, None)
-            if candidate and callable(candidate):
-                fn = candidate
-                break
-
-        if fn is None:
-            return {"status": "error", "message": f"Outil {tool_name}: handler introuvable"}
-
-        result = await fn(**arguments)
-        return result if isinstance(result, dict) else {"status": "ok", "data": result}
+        try:
+            result = await mcp.call_tool(tool_name, arguments)
+        except ToolError as exc:
+            return {"status": "error", "message": str(exc)}
+        if result.is_error:
+            message = next((block.text for block in result.content if block.type == "text"), "Erreur serveur MCP")
+            return {"status": "error", "message": message}
+        if result.structured_content is not None:
+            return result.structured_content
+        text = next((block.text for block in result.content if block.type == "text"), "")
+        return json.loads(text) if text else {"status": "error", "message": "Réponse vide du serveur"}
     
     def _read_version(self) -> str:
         """Lit la version depuis le fichier VERSION."""

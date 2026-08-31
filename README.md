@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.2.1).
 
-**Dernière version** : v3.2.1 (30 août 2026) — `storage_check` et `storage_cleanup` détectent désormais les ontologies S3 devenues orphelines après la suppression d'une mémoire, tout en protégeant les ontologies encore référencées et les mémoires legacy sans `ontology_uri`. Correctif de l'issue [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
+**Dernière version** : v3.2.1 (31 août 2026) — `storage_check` et `storage_cleanup` détectent désormais les ontologies S3 devenues orphelines après la suppression d'une mémoire, tout en protégeant les ontologies encore référencées et les mémoires legacy sans `ontology_uri`. Correctif de l'issue [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
 
 ---
 
@@ -353,7 +353,8 @@ Interfaces disponibles :
 ### Installation des dépendances CLI
 
 ```bash
-pip install httpx click rich prompt_toolkit mcp
+pip install -r requirements.txt -r requirements.lock
+pip install prompt_toolkit
 ```
 
 ### Mode Click (scriptable)
@@ -666,15 +667,24 @@ Ajoutez dans votre configuration MCP :
 
 ### Via Python (client MCP)
 
+La v3.2.1 utilise le SDK officiel MCP **2.1.1**. Réinstaller les dépendances de la
+CLI avec `pip install -r requirements.txt -r requirements.lock`. Le serveur reste
+compatible avec les clients MCP existants ; les noms et arguments des 40 outils
+ne changent pas. Docker utilise le même verrouillage des dépendances Python.
+
 ```python
-from mcp.client.streamable_http import streamablehttp_client
+import httpx2
+from mcp.client.streamable_http import streamable_http_client
 from mcp import ClientSession
 import base64
 
 async def exemple():
     headers = {"Authorization": "Bearer votre_token"}
     
-    async with streamablehttp_client("http://localhost:8070/mcp", headers=headers) as (read, write, _):
+    async with (
+        httpx2.AsyncClient(headers=headers, timeout=httpx2.Timeout(30, read=900), trust_env=False) as http,
+        streamable_http_client("http://localhost:8070/mcp", http_client=http) as (read, write),
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             

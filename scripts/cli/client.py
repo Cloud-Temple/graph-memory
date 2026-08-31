@@ -92,65 +92,46 @@ class MCPClient:
         """
         import asyncio
         import sys
-        import httpx
+        import httpx2
         from mcp import ClientSession
-        from mcp.client.streamable_http import streamablehttp_client
+        from mcp.client.streamable_http import streamable_http_client
 
         headers = {"Authorization": f"Bearer {self.token}"}
 
-        def _httpx_client_factory(headers=None, timeout=None, auth=None):
-            return httpx.AsyncClient(
-                follow_redirects=True,
-                headers=headers,
-                timeout=timeout,
-                auth=auth,
-                trust_env=False,
-            )
+        async def _on_log(params):
+            if on_progress and params.data:
+                try:
+                    await on_progress(str(params.data))
+                except Exception:
+                    pass  # Une erreur d'affichage ne doit pas interrompre l'opération.
 
         last_error = None
         for attempt in range(1, max_retries + 1):
             try:
-                async with streamablehttp_client(
-                    f"{self.base_url}/mcp",
+                async with httpx2.AsyncClient(
                     headers=headers,
-                    timeout=30,              # connexion initiale : 30s
-                    sse_read_timeout=900,    # attente réponse : 15 min (extraction LLM de gros docs)
-                    httpx_client_factory=_httpx_client_factory,
-                ) as (read, write, _):
-                    async with ClientSession(read, write) as session:
+                    timeout=httpx2.Timeout(30, read=900),
+                    follow_redirects=True,
+                    trust_env=False,
+                ) as http_client, streamable_http_client(
+                    f"{self.base_url}/mcp", http_client=http_client,
+                ) as (read, write):
+                    async with ClientSession(
+                        read, write, logging_callback=_on_log,
+                        log_level="info" if on_progress else None,
+                    ) as session:
                         await session.initialize()
-                        
-                        # Capturer les notifications de progression (ctx.info())
-                        # Le SDK MCP expose _received_notification() comme hook surchargeable
-                        if on_progress:
-                            _original_received = session._received_notification
-                            
-                            async def _patched_received_notification(notification):
-                                try:
-                                    # Le SDK wrappe dans un type union : notification.root
-                                    # est le vrai objet (ex: LoggingMessageNotification)
-                                    root = getattr(notification, 'root', notification)
-                                    params = getattr(root, 'params', None)
-                                    if params:
-                                        # ctx.info() → LoggingMessageNotification.params.data
-                                        msg = getattr(params, 'data', None)
-                                        if msg:
-                                            await on_progress(str(msg))
-                                except Exception:
-                                    pass
-                                # Appeler le handler original
-                                await _original_received(notification)
-                            
-                            session._received_notification = _patched_received_notification
                         
                         result = await session.call_tool(tool_name, args)
                         # --- Parsing robuste de la réponse MCP ---
                         # Vérifier si le serveur a renvoyé une erreur
-                        if getattr(result, 'isError', False):
+                        if result.is_error:
                             error_msg = "Erreur serveur MCP"
                             if result.content:
                                 error_msg = getattr(result.content[0], 'text', '') or error_msg
                             return {"status": "error", "message": error_msg}
+                        if result.structured_content is not None:
+                            return result.structured_content
                         # Extraire le texte du premier bloc de contenu
                         text = ""
                         if result.content:

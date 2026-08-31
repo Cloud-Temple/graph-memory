@@ -195,7 +195,7 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
 | Composant       | Technologie                   | Version               |
 | --------------- | ----------------------------- | --------------------- |
 | Runtime         | Python                        | 3.11+                 |
-| MCP SDK         | `mcp` (FastMCP)               | ≥ 1.8.0               |
+| MCP SDK         | `mcp` (MCPServer)             | 2.1.1 (SDK 2)         |
 | Web Framework   | FastAPI + Starlette           | ≥ 0.100.0             |
 | ASGI Server     | Uvicorn                       | ≥ 0.20.0              |
 | Graph Database  | Neo4j Community               | 5.x                   |

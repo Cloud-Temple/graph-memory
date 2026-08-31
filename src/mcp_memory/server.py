@@ -2,7 +2,7 @@
 """
 MCP Memory Server - Serveur principal.
 
-Expose tous les outils MCP via Streamable HTTP avec FastMCP.
+Expose tous les outils MCP via Streamable HTTP avec le SDK MCP 2.
 """
 
 import os
@@ -20,8 +20,9 @@ from pydantic import Field
 # Charger .env avant les imports qui en dépendent
 load_dotenv()
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.mcpserver import MCPServer, Context
 
+from . import __version__
 from .config import get_settings
 from .auth.middleware import AuthMiddleware, LoggingMiddleware, StaticFilesMiddleware
 from .auth.context import check_memory_access, check_write_permission, check_admin_permission, get_allowed_memory_ids, current_auth
@@ -35,12 +36,10 @@ from .storage_consistency import collect_referenced_ontology_keys, is_referenced
 
 settings = get_settings()
 
-# Créer l'instance FastMCP
-# host="0.0.0.0" pour accepter les connexions externes (reverse proxy, Docker)
-mcp = FastMCP(
+# Le binding HTTP est configuré à la création de l'app et dans Uvicorn.
+mcp = MCPServer(
     name=settings.mcp_server_name,
-    host=settings.mcp_server_host,
-    port=settings.mcp_server_port,
+    version=__version__,
 )
 
 
@@ -3104,6 +3103,18 @@ async def backup_restore_archive(
 # Point d'entrée
 # =============================================================================
 
+def create_app(*, host: str, debug: bool = False):
+    """Construit la pile ASGI commune au serveur et aux tests de transport."""
+    base_app = mcp.streamable_http_app(
+        host=host,
+        # Préserver les uploads de 50 Mio encodés en base64 (défaut SDK 2 : 4 Mio).
+        max_request_body_size=int(settings.max_document_size_bytes * 1.5),
+    )
+    app = StaticFilesMiddleware(base_app)
+    app = LoggingMiddleware(app, debug=debug)
+    return AuthMiddleware(app, debug=debug)
+
+
 def main():
     """Point d'entrée principal."""
     parser = argparse.ArgumentParser(description="MCP Memory Server")
@@ -3112,16 +3123,8 @@ def main():
     parser.add_argument("--debug", action="store_true", default=settings.mcp_server_debug)
     args = parser.parse_args()
     
-    # Récupérer l'app ASGI Streamable HTTP de FastMCP
-    # Remplace l'ancien mcp.sse_app() — endpoint unique /mcp au lieu de /sse + /messages
-    # Le HostNormalizerMiddleware n'est plus nécessaire (plus de validation Host par Starlette)
-    base_app = mcp.streamable_http_app()
-    
-    # Empiler les middlewares (le dernier wrappé est le premier exécuté)
-    # Flux requête : AuthMiddleware → LoggingMiddleware → StaticFilesMiddleware → MCP Streamable HTTP app
-    app = StaticFilesMiddleware(base_app)
-    app = LoggingMiddleware(app, debug=args.debug)
-    app = AuthMiddleware(app, debug=args.debug)
+    # Auth → logs → routes web/admin → MCP Streamable HTTP.
+    app = create_app(host=args.host, debug=args.debug)
     
     # Sécurité v2.1.0 : vérifier la clé bootstrap au démarrage
     check_bootstrap_key_safety(settings.admin_bootstrap_key or "")

@@ -71,7 +71,7 @@ def create_progress_callback(state: dict):
     et met à jour l'état de progression.
 
     Les messages proviennent de ctx.info() côté serveur MCP et sont
-    interceptés via le hook _received_notification du SDK MCP.
+    reçus via le callback public logging_callback du SDK MCP.
 
     Args:
         state: dict créé par create_progress_state()
