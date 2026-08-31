@@ -10,7 +10,8 @@
 - **Gros documents** : limite HTTP explicitement alignée sur les 50 Mio applicatifs encodés en base64, pour éviter la nouvelle limite SDK de 4 Mio.
 - **Dépendances figées** : `requirements.lock` inclut les dépendances transitives et l'outillage Python ; Docker l'installe sans `pip --upgrade` non borné et vérifie les imports SDK 2 au build.
 - Migration interne : pas de changement des paramètres métier ni de migration des données. Les environnements exécutant la CLI Python doivent réinstaller les dépendances.
-- **Validation** : 9 tests ciblés passent sous Python 3.11/Docker (authentification, admin, protocoles legacy/2026, notifications, uploads >4 Mio et limite HTTP), build sans cache réussi, schémas des 40 outils inchangés. La recette complète avec LLM reste à rejouer après résolution des erreurs 401 LLMaaS locales.
+- **Validation** : 9 tests ciblés passent sous Python 3.11/Docker (authentification, admin, protocoles legacy/2026, notifications, uploads >4 Mio et limite HTTP), build sans cache réussi, schémas des 40 outils inchangés. Après renouvellement de la clé LLMaaS, 19 contrôles fonctionnels réels passent avec le CLI Go et le serveur SDK 2 : ingestion de 3 documents, extraction d'entités et relations, recherche graphe et vectorielle, déduplication locale/distante, remplacement explicite et cohérence S3/Neo4j/Qdrant.
+- **Réserve de recette locale** : les accès TLS/S3 présentent des délais intermittents, reproduits également avec le serveur SDK 1. Le nettoyage a dépassé le délai client de 120 secondes ; la suppression effective des ressources de test a été vérifiée séparément (aucun résidu S3, Neo4j ou Qdrant). La suite de recette globale n'a pas été rejouée.
 
 ### 🧹 Cleanup des ontologies S3 orphelines
 
