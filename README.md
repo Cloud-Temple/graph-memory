@@ -801,7 +801,7 @@ graph-memory/
 │
 └── src/mcp_memory/           # Code source du service
     ├── __init__.py
-    ├── server.py             # Serveur MCP principal (FastMCP + outils)
+    ├── server.py             # Serveur MCP principal (MCPServer + 40 outils)
     ├── config.py             # Configuration centralisée (pydantic-settings)
     │
     ├── auth/                 # Authentification
@@ -904,8 +904,8 @@ docker compose exec mcp-memory env | grep -E "S3_|LLMAAS_|NEO4J_"
 
 ### Erreur 421 Misdirected Request (derrière un reverse proxy)
 
-- **Cause** : le SDK MCP v1.26+ active une protection DNS rebinding quand `host="127.0.0.1"` (défaut). Le `Host` header public est rejeté.
-- **Fix** : vérifiez que `FastMCP` est initialisé avec `host="0.0.0.0"` (ou `settings.mcp_server_host`) dans `server.py`. Depuis v1.2.2, c'est le comportement par défaut.
+- **Cause** : la protection DNS rebinding du SDK MCP peut rejeter le `Host` public lorsque l'application Streamable HTTP est configurée avec une adresse de boucle locale.
+- **Fix** : vérifiez que `MCP_SERVER_HOST=0.0.0.0`. `create_app()` transmet cette valeur à `MCPServer.streamable_http_app()` ; c'est la valeur par défaut du service.
 - **Vérification** : `curl -s -o /dev/null -w '%{http_code}' https://votre-domaine/mcp` → ne doit PAS retourner 421.
 
 ### Erreur 401 Unauthorized
