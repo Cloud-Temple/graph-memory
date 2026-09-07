@@ -1,6 +1,8 @@
 """Contrats HTTP réels du SDK 2, sans S3, LLM ou base externe."""
 
 import asyncio
+import base64
+import hashlib
 import json
 import socket
 from types import SimpleNamespace
@@ -26,6 +28,8 @@ async def service(monkeypatch):
     from src.mcp_memory.auth.context import current_auth
 
     monkeypatch.setattr(server.settings, "admin_bootstrap_key", "sdk2-test-admin")
+    # Garde les tests de limite rapides : 4 Mio par document, 12 Mio par requête.
+    monkeypatch.setattr(server.settings, "max_document_size_mb", 4)
 
     class Tokens:
         async def validate_token(self, token):
@@ -88,7 +92,7 @@ async def service(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sdk2_cli_large_request_progress_and_errors(service, monkeypatch):
-    url, _ = service
+    url, server = service
     # Un proxy du poste ne doit pas détourner les requêtes locales.
     monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
     monkeypatch.setenv("NO_PROXY", "")
@@ -115,6 +119,41 @@ async def test_sdk2_cli_large_request_progress_and_errors(service, monkeypatch):
     invalid = await client.call_tool("sdk2_probe", {})
     assert invalid["status"] == "error"
     assert "payload" in invalid["message"]
+
+    # Deux documents de 3 Mio produisent une requête JSON/Base64 d'environ
+    # 8 Mio : elle dépassait l'ancienne limite de 6 Mio (1,5 × document).
+    from src.mcp_memory.core import ingest_queue
+
+    class Storage:
+        @staticmethod
+        def compute_hash(content):
+            return hashlib.sha256(content).hexdigest()
+
+    class Queue:
+        def __init__(self):
+            self.calls = 0
+
+        async def submit(self, **kwargs):
+            self.calls += 1
+            return {"status": "queued", "job_id": f"job-{self.calls}"}
+
+    queue = Queue()
+    monkeypatch.setattr(server, "get_storage", lambda: Storage())
+    monkeypatch.setattr(ingest_queue, "get_ingest_queue", lambda: queue)
+    raw = b"b" * (3 * 1024 * 1024)
+    encoded = base64.b64encode(raw).decode()
+    digest = hashlib.sha256(raw).hexdigest()
+    batch = await client.call_tool("memory_ingest_batch_async", {
+        "memory_id": "allowed",
+        "documents": [
+            {"content_base64": encoded, "filename": "a.md", "source_path": "a.md", "sha256": digest},
+            {"content_base64": encoded, "filename": "b.md", "source_path": "b.md", "sha256": digest},
+        ],
+    })
+    assert batch["status"] == "ok"
+    assert batch["total"] == 2
+    assert batch["counts"]["queued"] == 2
+    assert queue.calls == 2
 
 
 @pytest.mark.asyncio
@@ -169,11 +208,72 @@ async def test_anonymous_mcp_denied_and_http_body_limit(service):
     url, server = service
     async with httpx2.AsyncClient(base_url=url, trust_env=False, timeout=20) as http:
         assert (await http.post("/mcp", json={})).status_code == 401
+        public_host = await http.post(
+            "/mcp",
+            headers={"Authorization": "Bearer sdk2-test-admin", "Host": "graph-memory.example.com"},
+            json={},
+        )
+        assert public_host.status_code != 421
         oversized = await http.post(
             "/mcp", headers={"Authorization": "Bearer sdk2-test-admin"},
-            content=b"x" * (int(server.settings.max_document_size_bytes * 1.5) + 1),
+            content=b"x" * (server.settings.max_document_size_bytes * 3 + 1),
         )
         assert oversized.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_internal_decorated_tool_calls(service, monkeypatch):
+    """Les routes et outils internes peuvent appeler les fonctions décorées."""
+    url, server = service
+
+    class Graph:
+        async def list_memories(self):
+            return []
+
+        async def search_entities(self, *args, **kwargs):
+            return []
+
+    class Storage:
+        @staticmethod
+        def _parse_key(uri):
+            return uri
+
+        async def check_documents(self, uris):
+            return {
+                "total": 0, "accessible": 0, "missing": 0, "errors": 0,
+                "total_size_bytes": 0, "details": [],
+            }
+
+        async def list_all_objects(self):
+            return []
+
+    class Embedder:
+        async def embed_query(self, query):
+            return [0.0]
+
+    class VectorStore:
+        async def search(self, **kwargs):
+            return []
+
+    monkeypatch.setattr(server, "get_graph", lambda: Graph())
+    monkeypatch.setattr(server, "get_storage", lambda: Storage())
+    monkeypatch.setattr(server, "get_embedder", lambda: Embedder())
+    monkeypatch.setattr(server, "get_vector_store", lambda: VectorStore())
+
+    cleanup = await server.storage_cleanup(dry_run=True)
+    assert cleanup["status"] == "ok"
+    assert cleanup["orphans_found"] == 0
+
+    async with httpx2.AsyncClient(base_url=url, trust_env=False) as http:
+        assert (await http.post("/api/login", json={"token": "sdk2-test-admin"})).status_code == 200
+        response = await http.post(
+            "/api/query", json={"memory_id": "allowed", "query": "test", "limit": 3}
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert result["status"] == "ok"
+        assert result["entities"] == []
+        assert result["rag_chunks"] == []
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,7 @@ Two usage modes:
 ## Prerequisites
 
 ```bash
-pip install httpx click rich prompt_toolkit
+python -m pip install -r requirements.txt -r requirements.lock
 docker compose up -d
 ```
 
@@ -207,7 +207,7 @@ docker compose ps && docker compose logs mcp-memory --tail 20
 python scripts/mcp_cli.py --token <your_token> health
 
 # Missing dependencies
-pip install httpx click rich prompt_toolkit
+python -m pip install -r requirements.txt -r requirements.lock
 ```
 
 ---

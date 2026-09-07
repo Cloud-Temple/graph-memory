@@ -11,8 +11,8 @@ Deux modes d'utilisation :
 ## Prérequis
 
 ```bash
-# Dépendances CLI
-pip install httpx click rich prompt_toolkit
+# Dépendances CLI et transport MCP SDK 2 (depuis la racine du dépôt)
+python -m pip install -r requirements.txt -r requirements.lock
 
 # Serveur MCP Memory démarré
 docker compose up -d
@@ -518,10 +518,10 @@ Ou passez-le en option :
 python scripts/mcp_cli.py --token <votre_token> health
 ```
 
-### "ModuleNotFoundError: No module named 'httpx'"
+### "ModuleNotFoundError" au démarrage de la CLI
 
 ```bash
-pip install httpx click rich prompt_toolkit
+python -m pip install -r requirements.txt -r requirements.lock
 ```
 
 ---

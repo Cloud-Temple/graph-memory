@@ -321,7 +321,7 @@ class StaticFilesMiddleware:
         # API REST - Proxy outils MCP (console admin)
         if path == "/api/tool" and method == "POST":
             try:
-                max_body = max(2 * 1024 * 1024, int(get_settings().max_document_size_bytes * 1.5))
+                max_body = max(2 * 1024 * 1024, get_settings().max_document_size_bytes * 3)
                 body = await self._read_body_limited(receive, max_bytes=max_body)
             except ValueError as e:
                 await self._send_json(send, {"status": "error", "message": str(e)}, 413)

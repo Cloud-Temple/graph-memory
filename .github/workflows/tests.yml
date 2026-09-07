@@ -26,3 +26,5 @@ jobs:
         run: python -m pip check
       - name: Run tests
         run: python -m pytest
+      - name: Build container
+        run: docker build --tag graph-memory:test .

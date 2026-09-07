@@ -158,8 +158,8 @@
 					setvar:tx.inbound_anomaly_score_threshold=5,\
 					setvar:tx.outbound_anomaly_score_threshold=4"
 
-				SecRequestBodyLimit 75000000
-				SecRequestBodyNoFilesLimit 75000000
+				SecRequestBodyLimit 160000000
+				SecRequestBodyNoFilesLimit 160000000
 				SecRequestBodyLimitAction ProcessPartial
 
 				SecAction "id:900220,phase:1,pass,nolog,\

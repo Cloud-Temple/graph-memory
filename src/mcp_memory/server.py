@@ -3094,8 +3094,10 @@ def create_app(*, host: str, debug: bool = False):
     """Construit la pile ASGI commune au serveur et aux tests de transport."""
     base_app = mcp.streamable_http_app(
         host=host,
-        # Préserver les uploads de 50 Mio encodés en base64 (défaut SDK 2 : 4 Mio).
-        max_request_body_size=int(settings.max_document_size_bytes * 1.5),
+        # Couvrir un lot de deux documents au plafond après encodage base64
+        # (défaut SDK 2 : 4 Mio). Les lots plus grands restent possibles si
+        # leur enveloppe JSON complète tient dans cette limite.
+        max_request_body_size=settings.max_document_size_bytes * 3,
     )
     app = StaticFilesMiddleware(base_app)
     app = LoggingMiddleware(app, debug=debug)
