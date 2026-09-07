@@ -4,6 +4,7 @@ import asyncio
 import json
 import socket
 from types import SimpleNamespace
+from typing import Optional
 
 import httpx2
 import pytest
@@ -43,9 +44,20 @@ async def service(monkeypatch):
     monkeypatch.setattr(server, "_token_manager", tokens)
 
     @server.mcp.tool()
-    async def sdk2_probe(payload: str, ctx: Context) -> dict:
-        await ctx.info("probe-progress")
-        return {"status": "ok", "size": len(payload), "client": current_auth.get()["client_name"]}
+    async def sdk2_probe(payload: str, ctx: Optional[Context] = None) -> dict:
+        if ctx:
+            try:
+                await ctx.info("probe-progress")
+            except Exception:
+                # /api/tool n'a pas de session MCP pour recevoir les logs ;
+                # les outils d'ingestion appliquent le même garde-fou.
+                pass
+        return {
+            "status": "ok",
+            "size": len(payload),
+            "client": current_auth.get()["client_name"],
+            "ctx_received": ctx is not None,
+        }
 
     @server.mcp.tool()
     async def sdk2_failure() -> dict:
@@ -87,8 +99,15 @@ async def test_sdk2_cli_large_request_progress_and_errors(service, monkeypatch):
 
     client = MCPClient(url, "writer")
     result = await client.call_tool("sdk2_probe", {"payload": "x" * (5 * 1024 * 1024)}, on_progress=progress)
-    assert result == {"status": "ok", "size": 5 * 1024 * 1024, "client": "writer"}
+    assert result == {
+        "status": "ok",
+        "size": 5 * 1024 * 1024,
+        "client": "writer",
+        "ctx_received": True,
+    }
     assert "probe-progress" in messages
+    without_progress = await client.call_tool("sdk2_probe", {"payload": "plain"})
+    assert without_progress["ctx_received"] is True
     failure = await client.call_tool("sdk2_failure", {})
     assert failure["status"] == "error"
     assert "sdk2_failure" in failure["message"]
@@ -130,6 +149,11 @@ async def test_admin_cookie_and_public_sdk_dispatch(service):
         result = await http.post("/api/tool", json={"tool": "system_whoami"})
         assert result.status_code == 200
         assert result.json()["auth_type"] == "bootstrap"
+        contextual = await http.post(
+            "/api/tool", json={"tool": "sdk2_probe", "arguments": {"payload": "admin"}}
+        )
+        assert contextual.status_code == 200
+        assert contextual.json()["ctx_received"] is True
         invalid = await http.post("/api/tool", json={"tool": "memory_stats", "arguments": {}})
         assert invalid.status_code == 200
         assert invalid.json()["status"] == "error"

@@ -233,7 +233,7 @@ Custom ontologies can be added as YAML files in `ONTOLOGIES/`.
 ```bash
 # Install CLI dependencies
 pip install -r requirements.txt -r requirements.lock
-pip install prompt_toolkit
+pip install prompt_toolkit==3.0.53
 
 # Scriptable mode
 python scripts/mcp_cli.py health

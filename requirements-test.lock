@@ -1,0 +1,6 @@
+# Dépendances de test Python 3.11, à installer après requirements.lock.
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+pytest==9.1.1
+pytest-asyncio==1.4.0

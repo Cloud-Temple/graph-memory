@@ -354,7 +354,7 @@ Interfaces disponibles :
 
 ```bash
 pip install -r requirements.txt -r requirements.lock
-pip install prompt_toolkit
+pip install prompt_toolkit==3.0.53
 ```
 
 ### Mode Click (scriptable)

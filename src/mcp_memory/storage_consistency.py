@@ -39,3 +39,11 @@ def is_referenced_ontology_key(key, referenced_keys, legacy_patterns):
         key.startswith(prefix) and key.endswith(suffix)
         for prefix, suffix in legacy_patterns
     )
+
+
+def filter_objects_for_memory(objects, memory_id=None):
+    """Limite les objets visibles au préfixe de la mémoire demandée."""
+    if not memory_id:
+        return list(objects)
+    prefix = f"{memory_id}/"
+    return [obj for obj in objects if obj.get("key", "").startswith(prefix)]

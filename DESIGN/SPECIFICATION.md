@@ -251,7 +251,7 @@ Requête entrante
 
 Les routes `/api/*` sont interceptées par `StaticFilesMiddleware` avant d'atteindre le SDK MCP. La route `/mcp` traverse toute la pile jusqu'au MCP SDK (Starlette Streamable HTTP).
 
-Depuis la v3.2.1, le serveur utilise `MCPServer` du SDK officiel MCP 2.1.1. Le transport reste Streamable HTTP sur `/mcp` et conserve les schémas d'entrée des 40 outils. La pile accepte les réponses JSON directes et les flux SSE négociés par le SDK. La limite du corps HTTP est fixée à 75 Mio afin de transporter un document applicatif de 50 Mio après encodage base64, avec une marge de sérialisation JSON. La console `/admin` invoque les outils par l'API publique `mcp.call_tool` ; le client Python utilise `streamable_http_client` avec `httpx2`.
+Depuis la v3.2.1, le serveur utilise `MCPServer` du SDK officiel MCP 2.1.1. Le transport reste Streamable HTTP sur `/mcp` et conserve les schémas d'entrée des 40 outils. La pile accepte les réponses JSON directes et les flux SSE négociés par le SDK. La limite du corps HTTP vaut 1,5 fois `MAX_DOCUMENT_SIZE_BYTES` afin d'absorber l'encodage base64 et l'enveloppe JSON-RPC. La console `/admin` invoque les outils par l'API publique `mcp.call_tool` ; le client Python utilise `streamable_http_client` avec `httpx2`.
 
 Le build Docker installe `requirements.txt` et le verrou complet `requirements.lock`, généré pour Python 3.11/Linux. Il n'effectue plus de mise à niveau non bornée de `pip` et vérifie les imports MCP SDK 2 pendant la construction. Cette migration ne change ni le modèle de données ni les paramètres métier des outils.
 

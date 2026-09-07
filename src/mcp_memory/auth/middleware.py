@@ -504,8 +504,6 @@ class StaticFilesMiddleware:
 
             result = await self._call_tool_direct(tool_name, arguments)
             await self._send_json(send, result)
-        except ValueError as e:
-            await self._send_json(send, {"status": "error", "message": str(e)}, 413)
         except Exception as e:
             print(f"❌ [/api/tool] {e}", file=sys.stderr)
             await self._send_json(send, {"status": "error", "message": "Erreur interne /api/tool"}, 500)
