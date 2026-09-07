@@ -16,7 +16,7 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.2.1).
 
-**Latest**: v3.2.1 (August 31, 2026) — `storage_check` and `storage_cleanup` now detect S3 ontology objects orphaned after memory deletion, while preserving ontologies still referenced by existing memories and legacy memories without an `ontology_uri`. Fixes [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Previously: v3.2.0 (`source_path` exposed in Graph-first search).
+**Latest**: v3.2.1 (September 7, 2026) — migration to the official MCP SDK **2.1.1** while preserving the 40 tools and their contract, reproducible Python builds through `requirements.lock`, and corrected cleanup of orphaned S3 ontology objects. Fixes [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) and [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Previously: v3.2.0 (`source_path` exposed in Graph-first search).
 
 ---
 

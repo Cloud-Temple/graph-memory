@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.2.1] - 2026-08-31
+## [3.2.1] - 2026-09-07
 
 ### Migration vers MCP Python SDK 2
 

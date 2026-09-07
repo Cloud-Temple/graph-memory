@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.2.1).
 
-**Dernière version** : v3.2.1 (31 août 2026) — `storage_check` et `storage_cleanup` détectent désormais les ontologies S3 devenues orphelines après la suppression d'une mémoire, tout en protégeant les ontologies encore référencées et les mémoires legacy sans `ontology_uri`. Correctif de l'issue [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
+**Dernière version** : v3.2.1 (7 septembre 2026) — migration vers le SDK officiel MCP **2.1.1** avec conservation des 40 outils et de leur contrat, build Python reproductible via `requirements.lock`, et correction du nettoyage des ontologies S3 orphelines. Correctifs des issues [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) et [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
 
 ---
 
@@ -942,4 +942,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v3.2.1 — Août 2026*
+*Graph Memory v3.2.1 — Septembre 2026*
