@@ -11,7 +11,7 @@ FROM python:3.11.12-slim
 # Métadonnées
 LABEL maintainer="Cloud Temple"
 LABEL description="MCP Memory Service - Knowledge Graph Memory for AI Agents"
-LABEL version="3.2.0"
+LABEL version="3.2.1"
 
 # Variables d'environnement Python
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -29,9 +29,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copie et installation des dépendances Python
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements.lock \
+    && pip check \
+    && python -c "from mcp.server.mcpserver import MCPServer, Context; from mcp.client.streamable_http import streamable_http_client"
 
 # Créer un utilisateur non-root pour la sécurité
 RUN groupadd -r mcp && useradd -r -g mcp -d /app -s /sbin/nologin mcp

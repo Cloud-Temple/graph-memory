@@ -1,19 +1,20 @@
 # =============================================================================
 # MCP Memory Service - Dépendances Python
 # =============================================================================
-# Installation : pip install -r requirements.txt
+# Installation : pip install -r requirements.txt -r requirements.lock
 # =============================================================================
 
 # === MCP SDK (Streamable HTTP transport) ===
-mcp>=1.8.0
+mcp==2.1.1
 
-# === Web Framework (pour FastMCP Streamable HTTP) ===
+# === Web Framework (pour MCPServer Streamable HTTP) ===
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
 starlette>=0.27.0
 
 # === HTTP Client (async) ===
 httpx>=0.27.0
+httpx2>=2.5.0,<3  # Transport du SDK MCP 2 ; httpx reste utilisé par les autres clients
 
 # === Neo4j Driver ===
 neo4j>=5.0.0
@@ -50,7 +51,5 @@ click>=8.0.0              # Framework CLI
 rich>=15.0.0              # Affichage CLI (tableaux, spinners, couleurs)
 aiohttp>=3.9.0            # Client HTTP async pour le CLI
 
-# === Tests (optionnel, pour dev) ===
-# pytest>=7.0.0
-# pytest-asyncio>=0.21.0
-# pytest-cov>=4.0.0
+# === Tests ===
+# Dépendances reproductibles dans requirements-test.lock.

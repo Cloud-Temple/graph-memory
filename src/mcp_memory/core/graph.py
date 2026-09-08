@@ -223,6 +223,7 @@ class GraphService:
                 name=node["name"],
                 description=node.get("description"),
                 ontology=node.get("ontology", "default"),
+                ontology_uri=node.get("ontology_uri"),
                 created_at=node["created_at"].to_native() if node.get("created_at") else datetime.utcnow()
             )
     

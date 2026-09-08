@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.2.0).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.2.1).
 
-**Latest**: v3.2.0 (June 4, 2026) — `source_path` exposed in Graph-first search: `memory_search` and `memory_query` now return the canonical source path (`source_path`) and a derived `repo_path` for every document/chunk, letting an agent open the Git file immediately without a full `document_list`. Enriched via a retroactive graph join (no re-ingestion). `document_get`/`document_list` tools aligned. Previously: v3.1.1 (`/admin` "⚡ Ingest Jobs" console).
+**Latest**: v3.2.1 (September 7, 2026) — migration to the official MCP SDK **2.1.1** while preserving the 40 tools and their contract, reproducible Python builds through `requirements.lock`, and corrected cleanup of orphaned S3 ontology objects. Fixes [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) and [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Previously: v3.2.0 (`source_path` exposed in Graph-first search).
 
 ---
 
@@ -144,17 +144,24 @@ open http://localhost:8070/admin
 
 ### With Python (MCP SDK)
 
+Version 3.2.1 uses the official MCP SDK **2.1.1**. Reinstall CLI dependencies with
+`pip install -r requirements.txt -r requirements.lock`. Existing MCP clients,
+tool names and arguments remain supported. Docker uses the same Python
+dependency lock.
+
 ```python
-from mcp.client.streamable_http import streamablehttp_client
+import httpx2
+from mcp.client.streamable_http import streamable_http_client
 from mcp import ClientSession
 import base64
 
 async def example():
     headers = {"Authorization": "Bearer your_token"}
     
-    async with streamablehttp_client(
-        "http://localhost:8070/mcp", headers=headers
-    ) as (read, write, _):
+    async with (
+        httpx2.AsyncClient(headers=headers, timeout=httpx2.Timeout(30, read=900), trust_env=False) as http,
+        streamable_http_client("http://localhost:8070/mcp", http_client=http) as (read, write),
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             
@@ -225,7 +232,8 @@ Custom ontologies can be added as YAML files in `ONTOLOGIES/`.
 
 ```bash
 # Install CLI dependencies
-pip install httpx click rich prompt_toolkit mcp
+pip install -r requirements.txt -r requirements.lock
+pip install prompt_toolkit==3.0.53
 
 # Scriptable mode
 python scripts/mcp_cli.py health

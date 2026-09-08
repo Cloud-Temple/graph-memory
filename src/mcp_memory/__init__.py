@@ -15,5 +15,5 @@ Usage:
     python -m src.mcp_memory.server --port 8002
 """
 
-__version__ = "3.2.0"
+__version__ = "3.2.1"
 __author__ = "Cloud Temple"
