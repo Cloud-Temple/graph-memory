@@ -67,7 +67,7 @@ Les systèmes RAG (Retrieval-Augmented Generation) traditionnels souffrent de li
 
 **Inclus (v2.0.1)** :
 - Serveur MCP Streamable HTTP (40 outils)
-- 6 ontologies (legal, cloud, managed-services, presales, general, software-development)
+- 8 ontologies (legal, cloud, managed-services, cloud-service-management, cloud-management-platform, presales, general, software-development)
 - Interface web interactive (graphe vis-network, panneau Q&A)
 - CLI complète (Click scriptable + Shell interactif)
 - Backup/Restore 3 couches (Neo4j + Qdrant + S3)
@@ -666,6 +666,8 @@ L'ontologie est le **contrat** entre le développeur et le LLM : elle définit e
 | `legal`            | `ONTOLOGIES/legal.yaml`            | 19 types | 23 types  | Contrats, CGV, CGVU, documents juridiques                 |
 | `cloud`            | `ONTOLOGIES/cloud.yaml`            | 26 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques    |
 | `managed-services` | `ONTOLOGIES/managed-services.yaml` | 20 types | 16 types  | Services managés, infogérance, MCO/MCS                    |
+| `cloud-service-management` | `ONTOLOGIES/cloud-service-management.yaml` | 39 types | 38 types | Exploitation de services cloud managés                    |
+| `cloud-management-platform` | `ONTOLOGIES/cloud-management-platform.yaml` | 11 types | 16 types | Cartographie type-level d'une CMP, outils et contraintes  |
 | `presales`         | `ONTOLOGIES/presales.yaml`         | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales           |
 | `general`          | `ONTOLOGIES/general.yaml`          | 26 types | 24 types  | Générique : FAQ, référentiels, certifications, RSE, specs |
 | `software-development` | `ONTOLOGIES/software-development.yaml` | 21 types | 23 types  | Code source, architecture logicielle, APIs, patterns, infra |
@@ -1237,6 +1239,8 @@ graph-memory/
 │   ├── legal.yaml            # 19 entités / 23 relations
 │   ├── cloud.yaml            # 26 entités / 19 relations (v1.2)
 │   ├── managed-services.yaml # 20 entités / 16 relations
+│   ├── cloud-service-management.yaml # 39 entités / 38 relations
+│   ├── cloud-management-platform.yaml # 11 entités / 16 relations (v1.0.0)
 │   ├── presales.yaml         # 28 entités / 30 relations (v1.1)
 │   ├── general.yaml          # 26 entités / 24 relations (v1.1)
 │   └── software-development.yaml # 21 entités / 23 relations (v1.2)

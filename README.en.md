@@ -51,8 +51,8 @@ Question (natural language)
 
 ## ✨ Features
 
-- **35 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
-- **Ontology-guided extraction** — 7 built-in ontologies (legal, cloud, managed-services, cloud-service-management, presales, general, software-development)
+- **40 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
+- **Ontology-guided extraction** — 8 built-in ontologies (legal, cloud, managed-services, cloud-service-management, cloud-management-platform, presales, general, software-development)
 - **Graph-Guided RAG** — graph identifies relevant docs, then Qdrant searches chunks *within* those docs
 - **Interactive web UI** — vis-network graph visualization, filtering, ASK panel with Markdown rendering
 - **Complete CLI** — Click (scriptable) + interactive shell with autocompletion
@@ -79,7 +79,7 @@ Question (natural language)
 ┌─────────────────────────────────────────────────────┐
 │           Graph Memory Service (internal :8002)      │
 │  Auth → Logging → Static Files → MCP Streamable HTTP │
-│  35 MCP tools • 7 ontologies • Graph-Guided RAG      │
+│  40 MCP tools • 8 ontologies • Graph-Guided RAG      │
 └────────────┬───────────┬──────────┬─────────────────┘
              ▼           ▼          ▼
          Neo4j 5    S3 Storage   Qdrant
@@ -221,6 +221,7 @@ Ontologies define the entity types and relation types the LLM should extract. Re
 | `cloud`            | 27       | 19        | Cloud infrastructure, product sheets     |
 | `managed-services` | 20       | 16        | Managed services, outsourcing            |
 | `cloud-service-management` | 39 | 38        | Managed cloud service operations         |
+| `cloud-management-platform` | 11 | 16       | Type-level CMP, tools and constraints     |
 | `presales`         | 28       | 30        | Pre-sales, RFP/RFI, proposals            |
 | `general`          | 24       | 22        | Generic: FAQ, certifications, CSR, specs |
 

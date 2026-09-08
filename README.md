@@ -127,7 +127,7 @@ Question en langage naturel
 ## ✨ Fonctionnalités
 
 ### Extraction intelligente
-- Extraction d'entités et relations guidée par **ontologie** (7 ontologies : legal, cloud, managed-services, cloud-service-management, presales, general, software-development)
+- Extraction d'entités et relations guidée par **ontologie** (8 ontologies : legal, cloud, managed-services, cloud-service-management, cloud-management-platform, presales, general, software-development)
 - Support des formats : **PDF, DOCX, Markdown, TXT, HTML, CSV**
 - Déduplication par hash SHA-256 (avec option `--force` pour ré-ingérer)
 - Instructions anti-hub pour éviter les entités trop génériques
@@ -538,6 +538,7 @@ Les ontologies définissent les **types d'entités** et **types de relations** q
 | `cloud`                    | `ONTOLOGIES/cloud.yaml`                     | 26 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques             |
 | `managed-services`         | `ONTOLOGIES/managed-services.yaml`          | 20 types | 16 types  | Services managés, infogérance                                      |
 | `cloud-service-management` | `ONTOLOGIES/cloud-service-management.yaml`  | 39 types | 38 types  | Exploitation de services cloud managés type LLMaaS, DBaaS, agents  |
+| `cloud-management-platform` | `ONTOLOGIES/cloud-management-platform.yaml` | 11 types | 16 types  | Cartographie type-level d'une CMP, de ses outils et contraintes    |
 | `presales`                 | `ONTOLOGIES/presales.yaml`                  | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales                    |
 | `general`                  | `ONTOLOGIES/general.yaml`                   | 26 types | 24 types  | Générique : FAQ, référentiels, certifications, RSE, specs produits |
 | `software-development`     | `ONTOLOGIES/software-development.yaml`      | 21 types | 23 types  | Architecture logicielle, APIs, composants, dépendances             |
@@ -783,6 +784,7 @@ graph-memory/
 │   ├── cloud.yaml                    # Infrastructure cloud (26 entités, 19 relations) [v1.2]
 │   ├── managed-services.yaml         # Services managés (20 entités, 16 relations)
 │   ├── cloud-service-management.yaml # Cloud Service Management (39 entités, 38 relations)
+│   ├── cloud-management-platform.yaml # Cloud Management Platform (11 entités, 16 relations)
 │   ├── presales.yaml                 # Avant-vente / RFP (28 entités, 30 relations) [v1.1]
 │   ├── software-development.yaml     # Développement logiciel (21 entités, 23 relations) [v1.2]
 │   └── general.yaml                  # Générique : FAQ, certif, RSE, specs (26 entités, 24 relations) [v1.1]

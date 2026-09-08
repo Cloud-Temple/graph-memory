@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Ontologie Cloud Management Platform
+
+- Ajout de `cloud-management-platform` pour cartographier une CMP au niveau conceptuel : microservices, ressources métier, produits, outils sous-jacents, capacités et contraintes techniques.
+- Les contraintes sont des entités reliées par `PlatformTool -IMPOSES-> TechnicalConstraint -CONSTRAINS-> ToolCapability`, y compris lorsqu'un microservice repose sur plusieurs outils.
+- Les faits de déploiement et les instances concrètes (datacenter, région, environnement, host, VM nommée, adresse IP) sont explicitement exclus.
+
 ## [3.2.1] - 2026-09-07
 
 ### Migration vers MCP Python SDK 2

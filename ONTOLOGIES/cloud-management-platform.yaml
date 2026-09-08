@@ -18,14 +18,13 @@
 # adresses IP). La portee d'une contrainte est une propriete de la contrainte,
 # pas un lieu.
 #
-# STATUT : v0.2.0 - WIP / DRAFT. Ajout de la couche "ressources metier gerees"
-# (ManagedResource + MANAGES / CONTAINS / ASSOCIATED_WITH) et generalisation du
-# vocabulaire (ontologie agnostique du fournisseur). La couche commerciale
-# (Product / ServiceOffering) reste PROVISOIRE et a qualifier
-# (cf. special_instructions et le corps de la PR).
+# STATUT : v1.0.0. Ontologie type-level stable, avec ressources metier gerees
+# (ManagedResource + MANAGES / CONTAINS / ASSOCIATED_WITH) et vocabulaire
+# agnostique du fournisseur. La couche commerciale reste volontairement bornee
+# aux produits et variantes explicitement nommes.
 
 name: cloud-management-platform
-version: "0.2.0"
+version: "1.0.0"
 description: |
   Ontologie de cartographie conceptuelle d'une Cloud Management Platform (CMP) :
   la Console / le portail self-service qui regroupe et expose les microservices
@@ -119,7 +118,8 @@ entity_types:
   - name: Product
     description: >-
       Produit commercialise par l'operateur cloud, expose par un ou plusieurs
-      microservices. COUCHE COMMERCIALE PROVISOIRE - a qualifier.
+      microservices. Le pricing, les SLA et le cycle de vie commercial restent
+      hors du perimetre de cette ontologie.
     priority: high
     examples:
       - "Compute IaaS"
@@ -128,8 +128,8 @@ entity_types:
 
   - name: ServiceOffering
     description: >-
-      Offre, tier, plan ou variante commerciale d'un produit.
-      COUCHE COMMERCIALE PROVISOIRE - a qualifier.
+      Offre, tier, plan ou variante commerciale explicitement nommee d'un
+      produit. Ne couvre ni le pricing ni les SLA commerciaux.
     examples:
       - "Compute IaaS Standard"
       - "Compute IaaS Dedie"
@@ -418,6 +418,9 @@ extraction_rules:
       Si plusieurs outils offrent la meme fonction, REUTILISE la meme
       ToolCapability abstraite pour permettre la comparaison entre outils.
     - Toute limitation / restriction technique d'un outil = TechnicalConstraint.
+      Avant de creer la contrainte, cree ou reutilise la ToolCapability exacte
+      qu'elle limite (ex. "poussee de configuration" -> "Poussee de
+      configuration").
     - Tout editeur / fournisseur d'outil = Vendor.
     - Une unite logicielle = Microservice ; le produit commercialise associe
       = Product, relie par REALIZES.
@@ -438,6 +441,12 @@ extraction_rules:
     - Une TechnicalConstraint se branche TOUJOURS ainsi :
       * l'outil qui l'impose      : PlatformTool -> IMPOSES -> TechnicalConstraint
       * la capacite qu'elle limite: TechnicalConstraint -> CONSTRAINS -> ToolCapability
+    - TechnicalConstraint est un TYPE D'ENTITE, jamais un type de relation.
+      Pour relier cette entite, utilise uniquement IMPOSES et CONSTRAINS selon
+      le schema ci-dessus.
+    - Chaque extremite d'une relation doit reprendre exactement le nom d'une
+      entite declaree dans la meme extraction. Une source ou une cible vide,
+      implicite ou non declaree est interdite.
     - Ne pose JAMAIS une contrainte directement sur un Microservice ou un
       Product. Un microservice peut s'appuyer sur plusieurs outils
       (BACKED_BY multiple) ; coller la contrainte sur le microservice rendrait
@@ -481,14 +490,13 @@ extraction_rules:
     - "limite / empeche / interdit" (contrainte) -> IMPOSES (depuis l'outil)
       + CONSTRAINS (vers la capacite).
     - "fournit l'outil" (editeur) -> PROVIDES.
+      Le sens est toujours Vendor -> PROVIDES -> PlatformTool, jamais l'inverse.
 
-    # --- COUCHE COMMERCIALE : PROVISOIRE / A QUALIFIER ---
-    - Product et ServiceOffering sont une premiere ebauche. Pour l'instant :
-      extrais Product comme le produit commercialise relie a son Microservice
+    # --- COUCHE COMMERCIALE : PERIMETRE BORNE ---
+    - Extrais Product comme le produit commercialise relie a son Microservice
       par REALIZES, et ServiceOffering uniquement si une variante/tier est
-      explicitement nommee. Ne modelise PAS encore le pricing, les SLA
-      commerciaux ni le cycle de vie commercial : ces aspects seront qualifies
-      dans une iteration ulterieure.
+      explicitement nommee. Ne modelise PAS le pricing, les SLA commerciaux ni
+      le cycle de vie commercial : ils sont hors perimetre.
 
 # NB : ce bloc 'examples' est conserve pour la relecture humaine mais n'est
 # PAS injecte dans le prompt d'extraction par build_prompt() (verifie dans
