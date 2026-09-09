@@ -28,3 +28,25 @@ jobs:
         run: python -m pytest
       - name: Build container
         run: docker build --tag graph-memory:test .
+
+  go-ingest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/graph-memory-ingest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/graph-memory-ingest/go.mod
+          cache-dependency-path: tools/graph-memory-ingest/go.sum
+      - name: Run tests
+        run: go test -count=1 ./...
+      - name: Run race detector
+        run: go test -count=1 -race ./...
+      - name: Run vet
+        run: go vet ./...
+      - name: Build release targets
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o /tmp/graph-memory-ingest-darwin-arm64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o /tmp/graph-memory-ingest-linux-amd64 .

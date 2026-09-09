@@ -283,4 +283,4 @@ async def test_initialize_reports_application_version(service):
         async with streamable_http_client(f"{url}/mcp", http_client=http) as (read, write):
             async with ClientSession(read, write) as session:
                 result = await session.initialize()
-                assert result.server_info.version == "3.2.1"
+                assert result.server_info.version == "3.3.0"

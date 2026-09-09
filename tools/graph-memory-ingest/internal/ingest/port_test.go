@@ -66,7 +66,7 @@ func TestReconcileCanonicalStatuses(t *testing.T) {
 }
 
 func TestEngineStandaloneAndNoPollCounts(t *testing.T) {
-	for _, status := range []string{"queued", "succeeded"} {
+	for _, status := range []string{"queued", "succeeded", "changed_skipped"} {
 		t.Run(status, func(t *testing.T) {
 			dir := t.TempDir()
 			data := []byte("standalone ingestion")
@@ -116,10 +116,16 @@ func TestEngineStandaloneAndNoPollCounts(t *testing.T) {
 			engine := NewEngine(mcpclient.NewClient(server.URL, "", time.Second))
 			result, err := engine.Run(context.Background(), IngestOptions{Path: dir, SpaceID: "demo", Ontology: "technical", CreateSpaceIfMissing: true, AllowedExtensions: []string{".md"}}, nil)
 			wantSucceeded := 0
+			wantSkipped := 0
+			wantUploaded := 1
 			if status == "succeeded" {
 				wantSucceeded = 1
 			}
-			if err != nil || !created || !submitted || !result.Success || result.TotalSucceeded != wantSucceeded || result.TotalUploaded != 1 {
+			if status == "changed_skipped" {
+				wantSkipped = 1
+				wantUploaded = 0
+			}
+			if err != nil || !created || !submitted || !result.Success || result.TotalSucceeded != wantSucceeded || result.TotalSkipped != wantSkipped || result.TotalUploaded != wantUploaded || len(result.Jobs) != 1 || result.Jobs[0].Status != status {
 				t.Fatalf("incorrect result: %+v err=%v", result, err)
 			}
 		})

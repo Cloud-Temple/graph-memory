@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-09-09
+
+### CLI Go d'ingestion massive
+
+- Ajout de `tools/graph-memory-ingest`, CLI autonome v1.0.0 compatible Graph Memory et Hivemind, avec sortie TUI interactive ou JSON pour l'automatisation.
+- Client MCP Streamable HTTP complet : handshake `initialize` / `notifications/initialized`, négociation stricte des versions `2024-11-05` et `2024-10-07`, réponses JSON ou SSE, session et version de protocole conservées.
+- Scan récursif avec exclusions des fichiers cachés, liens symboliques et formats binaires non autorisés ; déduplication SHA-256 locale puis distante, avec arrêt sur les erreurs réelles de catalogue.
+- Ingestion par lots, réconciliation bijective des fichiers et résultats, prise en charge explicite de tous les statuts canoniques et suivi robuste des jobs asynchrones.
+- La sortie structurée conserve désormais `changed_skipped` au lieu de le réduire à `skipped`, afin de distinguer un document modifié qui exige `--replace` d'un doublon strict.
+- Commande d'évaluation d'ontologie avec espace temporaire, validation YAML, mesure du ratio `Other` / `Generic`, seuil configurable et nettoyage automatique. Cette évaluation nécessite un backend Hivemind qui applique `options.ontology_yaml` et expose `graph_stats.entity_types` ; Graph Memory standalone couvre l'ingestion mais pas ce workflow.
+- Tests Go, race detector, `go vet` et compilations macOS arm64 / Linux amd64 intégrés à la validation de la release.
+- Recette réelle sur Graph Memory MCP SDK 2 : handshake, ingestion de deux documents, reprise d'un document échoué, déduplication distante 2/2, détection `changed_skipped`, remplacement explicite et nettoyage final vérifié. Une latence TLS/S3 intermittente a nécessité une reprise et a fait expirer la réponse du nettoyage, terminé côté serveur ; l'absence de la mémoire a été confirmée dans une nouvelle session.
+
 ### Ontologie Cloud Management Platform
 
 - Ajout de `cloud-management-platform` pour cartographier une CMP au niveau conceptuel : microservices, ressources métier, produits, outils sous-jacents, capacités et contraintes techniques.

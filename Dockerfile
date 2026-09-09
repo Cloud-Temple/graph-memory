@@ -11,7 +11,7 @@ FROM python:3.11.12-slim
 # Métadonnées
 LABEL maintainer="Cloud Temple"
 LABEL description="MCP Memory Service - Knowledge Graph Memory for AI Agents"
-LABEL version="3.2.1"
+LABEL version="3.3.0"
 
 # Variables d'environnement Python
 ENV PYTHONDONTWRITEBYTECODE=1

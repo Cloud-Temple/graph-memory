@@ -14,9 +14,9 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.2.1).
+See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.3.0).
 
-**Latest**: v3.2.1 (September 7, 2026) — migration to the official MCP SDK **2.1.1** while preserving the 40 tools and their contract, reproducible Python builds through `requirements.lock`, and corrected cleanup of orphaned S3 ontology objects. Fixes [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) and [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Previously: v3.2.0 (`source_path` exposed in Graph-first search).
+**Latest**: v3.3.0 (September 9, 2026) — standalone `graph-memory-ingest` Go CLI for bulk ingestion, job tracking and ontology evaluation, plus the conceptual Cloud Management Platform ontology. Version 3.2.1 migrated the server to the official MCP SDK **2.1.1**.
 
 ---
 
@@ -56,6 +56,7 @@ Question (natural language)
 - **Graph-Guided RAG** — graph identifies relevant docs, then Qdrant searches chunks *within* those docs
 - **Interactive web UI** — vis-network graph visualization, filtering, ASK panel with Markdown rendering
 - **Complete CLI** — Click (scriptable) + interactive shell with autocompletion
+- **Bulk ingestion CLI** — standalone Go binary with recursive scan, batching, TUI and structured JSON output
 - **Backup/Restore** — full 3-layer backup (Neo4j + Qdrant + S3) with tar.gz archive support
 - **Multi-tenant** — namespace isolation per memory in Neo4j
 - **Security** — Coraza WAF, Bearer Token auth, **hardened multi-tenant isolation** (v1.6.1), admin delegation, rate limiting, non-root container, isolated Docker network, **150+ automated checks**
@@ -256,6 +257,21 @@ export MCP_URL=https://graph-mem.example.com
 export MCP_TOKEN=your_production_key
 python scripts/mcp_cli.py health
 ```
+
+### Bulk ingestion with the Go CLI
+
+`graph-memory-ingest` scans directories, deduplicates documents, submits batches
+and follows asynchronous jobs to a terminal status. It supports Graph Memory and
+Hivemind, with an interactive TUI or structured JSON output.
+
+```bash
+cd tools/graph-memory-ingest
+go build -o bin/graph-memory-ingest .
+./bin/graph-memory-ingest run --path ./docs --space my-memory --watch
+```
+
+See [`tools/graph-memory-ingest/README.md`](tools/graph-memory-ingest/README.md)
+for configuration, protocol guarantees, status handling and ontology evaluation.
 
 ---
 

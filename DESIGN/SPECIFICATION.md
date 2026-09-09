@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 3.2.1 | **Date** : 7 septembre 2026
+> **Version** : 3.3.0 | **Date** : 9 septembre 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 
@@ -1055,6 +1055,21 @@ token update HASH --email user@example.com
 |    2     | `MCP_SERVER_URL` | `ADMIN_BOOTSTRAP_KEY` | `.env` via `load_dotenv()`      |
 |    3     | —                | —                     | Défaut: `http://localhost:8070` |
 
+### 11.7 CLI Go d'ingestion massive
+
+`tools/graph-memory-ingest` complète la CLI Python pour les ingestions de corpus.
+Ce binaire autonome scanne récursivement les fichiers, calcule leur SHA-256,
+interroge le catalogue distant, soumet des lots puis suit les jobs asynchrones.
+Il communique directement en MCP Streamable HTTP et accepte les réponses JSON ou
+SSE après le handshake `initialize` / `notifications/initialized`.
+
+La réconciliation entre fichiers et résultats est bijective : une réponse
+manquante, dupliquée ou inconnue interrompt le traitement. Les erreurs réelles de
+catalogue sont bloquantes ; seul l'outil absent autorise une poursuite sans
+déduplication distante. Le mode TUI est destiné à l'opérateur et `--json` aux
+automatisations. Le contrat complet est documenté dans
+`tools/graph-memory-ingest/README.md`.
+
 ---
 
 ## 12. Intégration Live Memory
@@ -1255,6 +1270,9 @@ graph-memory/
 │       ├── ingest_progress.py # Progression temps réel
 │       └── shell.py          # Shell interactif
 │
+├── tools/
+│   └── graph-memory-ingest/  # CLI Go autonome d'ingestion par lots
+│
 ├── starter-kit/              # Kit pour créer un nouveau service MCP
 │
 └── src/mcp_memory/           # Code source service
@@ -1307,5 +1325,5 @@ graph-memory/
 
 ---
 
-*Graph Memory v3.2.1 — Cahier de Spécification — 7 septembre 2026*
+*Graph Memory v3.3.0 — Cahier de Spécification — 9 septembre 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*

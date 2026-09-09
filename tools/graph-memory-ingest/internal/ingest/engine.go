@@ -215,10 +215,10 @@ func (e *Engine) Run(ctx context.Context, opts IngestOptions, callback ProgressC
 				res.Jobs = append(res.Jobs, jobRec)
 				report("upload_failed", fmt.Sprintf("Failed to upload %s: %s", jobRec.Filename, jobRec.Error), totalProcessed, scanRes.TotalFiles, jobRec.Filename, "", "failed", jobRec.Error)
 			case "skipped", "changed_skipped":
-				jobRec.Status = "skipped"
+				jobRec.Status = st
 				res.TotalSkipped++
 				res.Jobs = append(res.Jobs, jobRec)
-				report("skipped", fmt.Sprintf("Skipped %s (%s)", jobRec.Filename, jobRec.Error), totalProcessed, scanRes.TotalFiles, jobRec.Filename, "", "skipped", "")
+				report("skipped", fmt.Sprintf("Skipped %s (%s)", jobRec.Filename, jobRec.Error), totalProcessed, scanRes.TotalFiles, jobRec.Filename, "", st, "")
 			case "succeeded", "completed":
 				jobRec.Status = "succeeded"
 				res.TotalSucceeded++
