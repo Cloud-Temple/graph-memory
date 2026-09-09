@@ -1,6 +1,6 @@
 # Cahier de Spécification Technique — Graph Memory
 
-> **Version** : 3.2.0 | **Date** : 4 juin 2026
+> **Version** : 3.2.1 | **Date** : 7 septembre 2026
 > **Auteur** : Christophe Lesur & Cloud Temple
 > **Repository** : https://github.com/Cloud-Temple/graph-memory
 
@@ -67,7 +67,7 @@ Les systèmes RAG (Retrieval-Augmented Generation) traditionnels souffrent de li
 
 **Inclus (v2.0.1)** :
 - Serveur MCP Streamable HTTP (40 outils)
-- 6 ontologies (legal, cloud, managed-services, presales, general, software-development)
+- 8 ontologies (legal, cloud, managed-services, cloud-service-management, cloud-management-platform, presales, general, software-development)
 - Interface web interactive (graphe vis-network, panneau Q&A)
 - CLI complète (Click scriptable + Shell interactif)
 - Backup/Restore 3 couches (Neo4j + Qdrant + S3)
@@ -195,7 +195,7 @@ Le canal de collaboration `graph_push` entre Live Memory et Graph Memory est un 
 | Composant       | Technologie                   | Version               |
 | --------------- | ----------------------------- | --------------------- |
 | Runtime         | Python                        | 3.11+                 |
-| MCP SDK         | `mcp` (FastMCP)               | ≥ 1.8.0               |
+| MCP SDK         | `mcp` (MCPServer)             | 2.1.1 (SDK 2)         |
 | Web Framework   | FastAPI + Starlette           | ≥ 0.100.0             |
 | ASGI Server     | Uvicorn                       | ≥ 0.20.0              |
 | Graph Database  | Neo4j Community               | 5.x                   |
@@ -250,6 +250,10 @@ Requête entrante
 ```
 
 Les routes `/api/*` sont interceptées par `StaticFilesMiddleware` avant d'atteindre le SDK MCP. La route `/mcp` traverse toute la pile jusqu'au MCP SDK (Starlette Streamable HTTP).
+
+Depuis la v3.2.1, le serveur utilise `MCPServer` du SDK officiel MCP 2.1.1. Le transport reste Streamable HTTP sur `/mcp` et conserve les schémas d'entrée des 40 outils. La pile accepte les réponses JSON directes et les flux SSE négociés par le SDK. La limite du corps HTTP vaut trois fois `MAX_DOCUMENT_SIZE_BYTES` : elle absorbe l'encodage base64 et permet au minimum deux documents à la taille maximale dans `memory_ingest_batch_async`. Les lots plus nombreux sont acceptés tant que leur enveloppe JSON complète tient dans cette limite. Le WAF autorise 160 MB avec la valeur par défaut de 50 Mio par document. La console `/admin` invoque les outils par l'API publique `mcp.call_tool` ; le client Python utilise `streamable_http_client` avec `httpx2`.
+
+Le build Docker installe `requirements.txt` et le verrou complet `requirements.lock`, généré pour Python 3.11/Linux. Il n'effectue plus de mise à niveau non bornée de `pip` et vérifie les imports MCP SDK 2 pendant la construction. Cette migration ne change ni le modèle de données ni les paramètres métier des outils.
 
 > **Note** : Le `HostNormalizerMiddleware` (présent en v1.3.x pour contourner la validation DNS rebinding du SDK MCP en mode SSE) a été **supprimé** en v1.4.0 — Streamable HTTP n'a plus cette validation.
 
@@ -662,6 +666,8 @@ L'ontologie est le **contrat** entre le développeur et le LLM : elle définit e
 | `legal`            | `ONTOLOGIES/legal.yaml`            | 19 types | 23 types  | Contrats, CGV, CGVU, documents juridiques                 |
 | `cloud`            | `ONTOLOGIES/cloud.yaml`            | 26 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques    |
 | `managed-services` | `ONTOLOGIES/managed-services.yaml` | 20 types | 16 types  | Services managés, infogérance, MCO/MCS                    |
+| `cloud-service-management` | `ONTOLOGIES/cloud-service-management.yaml` | 39 types | 38 types | Exploitation de services cloud managés                    |
+| `cloud-management-platform` | `ONTOLOGIES/cloud-management-platform.yaml` | 11 types | 16 types | Cartographie type-level d'une CMP, outils et contraintes  |
 | `presales`         | `ONTOLOGIES/presales.yaml`         | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales           |
 | `general`          | `ONTOLOGIES/general.yaml`          | 26 types | 24 types  | Générique : FAQ, référentiels, certifications, RSE, specs |
 | `software-development` | `ONTOLOGIES/software-development.yaml` | 21 types | 23 types  | Code source, architecture logicielle, APIs, patterns, infra |
@@ -1233,6 +1239,8 @@ graph-memory/
 │   ├── legal.yaml            # 19 entités / 23 relations
 │   ├── cloud.yaml            # 26 entités / 19 relations (v1.2)
 │   ├── managed-services.yaml # 20 entités / 16 relations
+│   ├── cloud-service-management.yaml # 39 entités / 38 relations
+│   ├── cloud-management-platform.yaml # 11 entités / 16 relations (v1.0.0)
 │   ├── presales.yaml         # 28 entités / 30 relations (v1.1)
 │   ├── general.yaml          # 26 entités / 24 relations (v1.1)
 │   └── software-development.yaml # 21 entités / 23 relations (v1.2)
@@ -1299,5 +1307,5 @@ graph-memory/
 
 ---
 
-*Graph Memory v3.0.0 — Cahier de Spécification — 3 juin 2026*
+*Graph Memory v3.2.1 — Cahier de Spécification — 7 septembre 2026*
 *Développé par Cloud Temple — https://www.cloud-temple.com*

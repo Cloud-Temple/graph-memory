@@ -60,9 +60,9 @@ services:
       - REPORTING_LEVEL=2
       # Taille max des requêtes (pour supporter l'upload de documents en base64)
       - ALLOWED_REQUEST_CONTENT_TYPE=|application/json|text/plain|multipart/form-data|application/x-www-form-urlencoded|application/octet-stream|
-      # Augmenter la limite de body pour les ingestions (50MB en base64 ≈ 70MB encodé)
-      - MAX_REQUEST_BODY_SIZE=75000000
-      - MAX_REQUEST_BODY_NOFILES=75000000
+      # Deux documents de 50 Mio encodés en base64 + enveloppe JSON (~140 MB)
+      - MAX_REQUEST_BODY_SIZE=160000000
+      - MAX_REQUEST_BODY_NOFILES=160000000
       - CRS_ENABLE_BODY_INSPECTION=1
     volumes:
       - ./waf/Caddyfile:/etc/caddy/Caddyfile:ro

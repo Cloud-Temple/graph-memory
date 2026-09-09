@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from src.mcp_memory.storage_consistency import (
     collect_referenced_ontology_keys,
+    filter_objects_for_memory,
     is_referenced_ontology_key,
 )
 
@@ -66,3 +67,14 @@ def test_legacy_memory_without_uri_protects_only_its_expected_ontology():
         referenced,
         legacy,
     )
+
+
+def test_scoped_storage_check_hides_other_memory_keys():
+    objects = [
+        {"key": "allowed/documents/a.txt"},
+        {"key": "other/documents/_ontology_secret.yaml"},
+        {"key": "_backups/allowed/archive.tar.gz"},
+    ]
+
+    assert filter_objects_for_memory(objects, "allowed") == [objects[0]]
+    assert filter_objects_for_memory(objects) == objects

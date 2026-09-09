@@ -2,7 +2,7 @@
 """
 MCP Memory Server - Serveur principal.
 
-Expose tous les outils MCP via Streamable HTTP avec FastMCP.
+Expose tous les outils MCP via Streamable HTTP avec le SDK MCP 2.
 """
 
 import os
@@ -20,13 +20,18 @@ from pydantic import Field
 # Charger .env avant les imports qui en dépendent
 load_dotenv()
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.mcpserver import MCPServer, Context
 
+from . import __version__
 from .config import get_settings
 from .auth.middleware import AuthMiddleware, LoggingMiddleware, StaticFilesMiddleware
 from .auth.context import check_memory_access, check_write_permission, check_admin_permission, get_allowed_memory_ids, current_auth
 from .core.validators import validate_memory_id, validate_filename, validate_document_size, validate_entity_name, validate_backup_id as validate_backup_id_format, check_bootstrap_key_safety
-from .storage_consistency import collect_referenced_ontology_keys, is_referenced_ontology_key
+from .storage_consistency import (
+    collect_referenced_ontology_keys,
+    filter_objects_for_memory,
+    is_referenced_ontology_key,
+)
 
 
 # =============================================================================
@@ -35,12 +40,10 @@ from .storage_consistency import collect_referenced_ontology_keys, is_referenced
 
 settings = get_settings()
 
-# Créer l'instance FastMCP
-# host="0.0.0.0" pour accepter les connexions externes (reverse proxy, Docker)
-mcp = FastMCP(
+# Le binding HTTP est configuré à la création de l'app et dans Uvicorn.
+mcp = MCPServer(
     name=settings.mcp_server_name,
-    host=settings.mcp_server_host,
-    port=settings.mcp_server_port,
+    version=__version__,
 )
 
 
@@ -2246,11 +2249,8 @@ async def storage_check(
         # 2. Collecter toutes les URIs des documents référencés dans le graphe
         graph_uris = set()          # URIs référencées dans Neo4j
         graph_uri_details = {}      # URI -> {memory_id, filename, doc_id}
-        memory_prefixes = set()     # Préfixes S3 des mémoires connues
-        
         for mem in memories:
             mid = mem.id
-            memory_prefixes.add(f"{mid}/")
             graph_data = await get_graph().get_full_graph(mid)
             
             for doc in graph_data.get("documents", []):
@@ -2274,28 +2274,14 @@ async def storage_check(
                 detail["filename"] = graph_uri_details[uri]["filename"]
                 detail["doc_id"] = graph_uri_details[uri]["doc_id"]
         
-        # 4. Lister tous les objets S3 pour détecter les orphelins
-        #    IMPORTANT : pour la détection d'orphelins, on compare avec TOUTES
-        #    les mémoires, pas seulement celles du scope. Sinon les docs des
-        #    autres mémoires apparaissent comme faux-positifs.
+        # 4. Lister les objets S3 pour détecter les orphelins. En mode scopé,
+        #    ne jamais exposer les clés appartenant à une autre mémoire.
         all_s3_objects = await get_storage().list_all_objects()
-        
-        # Collecter les clés S3 de TOUTES les mémoires (pas seulement le scope)
-        all_graph_uris = set(graph_uris)  # Commencer avec celles du scope
-        if memory_id:
-            # Charger les URIs des autres mémoires aussi
-            for mem in all_memories:
-                if mem.id == memory_id:
-                    continue  # Déjà chargé
-                other_graph = await get_graph().get_full_graph(mem.id)
-                for doc in other_graph.get("documents", []):
-                    uri = doc.get("uri", "")
-                    if uri:
-                        all_graph_uris.add(uri)
+        visible_s3_objects = filter_objects_for_memory(all_s3_objects, memory_id)
         
         # Convertir les URIs du graphe en clés S3 pour comparaison
         graph_keys = set()
-        for uri in all_graph_uris:
+        for uri in graph_uris:
             try:
                 key = get_storage()._parse_key(uri)
                 graph_keys.add(key)
@@ -2307,7 +2293,7 @@ async def storage_check(
         
         # Détecter les orphelins : sur S3 mais pas dans le graphe
         orphans = []
-        for obj in all_s3_objects:
+        for obj in visible_s3_objects:
             key = obj["key"]
             
             # Ignorer les fichiers de health check
@@ -2431,7 +2417,7 @@ async def storage_check(
                 "total_size_bytes": orphan_total_size,
                 "files": orphans
             },
-            "s3_total_objects": len(all_s3_objects),
+            "s3_total_objects": len(visible_s3_objects),
             "summary": (
                 f"✅ {check_result['accessible']}/{check_result['total']} docs accessibles"
                 + (f", ❌ {check_result['missing']} manquants" if check_result['missing'] > 0 else "")
@@ -3104,6 +3090,20 @@ async def backup_restore_archive(
 # Point d'entrée
 # =============================================================================
 
+def create_app(*, host: str, debug: bool = False):
+    """Construit la pile ASGI commune au serveur et aux tests de transport."""
+    base_app = mcp.streamable_http_app(
+        host=host,
+        # Couvrir un lot de deux documents au plafond après encodage base64
+        # (défaut SDK 2 : 4 Mio). Les lots plus grands restent possibles si
+        # leur enveloppe JSON complète tient dans cette limite.
+        max_request_body_size=settings.max_document_size_bytes * 3,
+    )
+    app = StaticFilesMiddleware(base_app)
+    app = LoggingMiddleware(app, debug=debug)
+    return AuthMiddleware(app, debug=debug)
+
+
 def main():
     """Point d'entrée principal."""
     parser = argparse.ArgumentParser(description="MCP Memory Server")
@@ -3112,16 +3112,8 @@ def main():
     parser.add_argument("--debug", action="store_true", default=settings.mcp_server_debug)
     args = parser.parse_args()
     
-    # Récupérer l'app ASGI Streamable HTTP de FastMCP
-    # Remplace l'ancien mcp.sse_app() — endpoint unique /mcp au lieu de /sse + /messages
-    # Le HostNormalizerMiddleware n'est plus nécessaire (plus de validation Host par Starlette)
-    base_app = mcp.streamable_http_app()
-    
-    # Empiler les middlewares (le dernier wrappé est le premier exécuté)
-    # Flux requête : AuthMiddleware → LoggingMiddleware → StaticFilesMiddleware → MCP Streamable HTTP app
-    app = StaticFilesMiddleware(base_app)
-    app = LoggingMiddleware(app, debug=args.debug)
-    app = AuthMiddleware(app, debug=args.debug)
+    # Auth → logs → routes web/admin → MCP Streamable HTTP.
+    app = create_app(host=args.host, debug=args.debug)
     
     # Sécurité v2.1.0 : vérifier la clé bootstrap au démarrage
     check_bootstrap_key_safety(settings.admin_bootstrap_key or "")

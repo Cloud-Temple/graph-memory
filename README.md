@@ -68,7 +68,7 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.2.1).
 
-**Dernière version** : v3.2.1 (30 août 2026) — `storage_check` et `storage_cleanup` détectent désormais les ontologies S3 devenues orphelines après la suppression d'une mémoire, tout en protégeant les ontologies encore référencées et les mémoires legacy sans `ontology_uri`. Correctif de l'issue [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
+**Dernière version** : v3.2.1 (7 septembre 2026) — migration vers le SDK officiel MCP **2.1.1** avec conservation des 40 outils et de leur contrat, build Python reproductible via `requirements.lock`, et correction du nettoyage des ontologies S3 orphelines. Correctifs des issues [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) et [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
 
 ---
 
@@ -127,7 +127,7 @@ Question en langage naturel
 ## ✨ Fonctionnalités
 
 ### Extraction intelligente
-- Extraction d'entités et relations guidée par **ontologie** (7 ontologies : legal, cloud, managed-services, cloud-service-management, presales, general, software-development)
+- Extraction d'entités et relations guidée par **ontologie** (8 ontologies : legal, cloud, managed-services, cloud-service-management, cloud-management-platform, presales, general, software-development)
 - Support des formats : **PDF, DOCX, Markdown, TXT, HTML, CSV**
 - Déduplication par hash SHA-256 (avec option `--force` pour ré-ingérer)
 - Instructions anti-hub pour éviter les entités trop génériques
@@ -353,7 +353,8 @@ Interfaces disponibles :
 ### Installation des dépendances CLI
 
 ```bash
-pip install httpx click rich prompt_toolkit mcp
+pip install -r requirements.txt -r requirements.lock
+pip install prompt_toolkit==3.0.53
 ```
 
 ### Mode Click (scriptable)
@@ -537,6 +538,7 @@ Les ontologies définissent les **types d'entités** et **types de relations** q
 | `cloud`                    | `ONTOLOGIES/cloud.yaml`                     | 26 types | 19 types  | Infrastructure cloud, fiches produits, docs techniques             |
 | `managed-services`         | `ONTOLOGIES/managed-services.yaml`          | 20 types | 16 types  | Services managés, infogérance                                      |
 | `cloud-service-management` | `ONTOLOGIES/cloud-service-management.yaml`  | 39 types | 38 types  | Exploitation de services cloud managés type LLMaaS, DBaaS, agents  |
+| `cloud-management-platform` | `ONTOLOGIES/cloud-management-platform.yaml` | 11 types | 16 types  | Cartographie type-level d'une CMP, de ses outils et contraintes    |
 | `presales`                 | `ONTOLOGIES/presales.yaml`                  | 28 types | 30 types  | Avant-vente, RFP/RFI, propositions commerciales                    |
 | `general`                  | `ONTOLOGIES/general.yaml`                   | 26 types | 24 types  | Générique : FAQ, référentiels, certifications, RSE, specs produits |
 | `software-development`     | `ONTOLOGIES/software-development.yaml`      | 21 types | 23 types  | Architecture logicielle, APIs, composants, dépendances             |
@@ -666,15 +668,24 @@ Ajoutez dans votre configuration MCP :
 
 ### Via Python (client MCP)
 
+La v3.2.1 utilise le SDK officiel MCP **2.1.1**. Réinstaller les dépendances de la
+CLI avec `pip install -r requirements.txt -r requirements.lock`. Le serveur reste
+compatible avec les clients MCP existants ; les noms et arguments des 40 outils
+ne changent pas. Docker utilise le même verrouillage des dépendances Python.
+
 ```python
-from mcp.client.streamable_http import streamablehttp_client
+import httpx2
+from mcp.client.streamable_http import streamable_http_client
 from mcp import ClientSession
 import base64
 
 async def exemple():
     headers = {"Authorization": "Bearer votre_token"}
     
-    async with streamablehttp_client("http://localhost:8070/mcp", headers=headers) as (read, write, _):
+    async with (
+        httpx2.AsyncClient(headers=headers, timeout=httpx2.Timeout(30, read=900), trust_env=False) as http,
+        streamable_http_client("http://localhost:8070/mcp", http_client=http) as (read, write),
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             
@@ -773,6 +784,7 @@ graph-memory/
 │   ├── cloud.yaml                    # Infrastructure cloud (26 entités, 19 relations) [v1.2]
 │   ├── managed-services.yaml         # Services managés (20 entités, 16 relations)
 │   ├── cloud-service-management.yaml # Cloud Service Management (39 entités, 38 relations)
+│   ├── cloud-management-platform.yaml # Cloud Management Platform (11 entités, 16 relations)
 │   ├── presales.yaml                 # Avant-vente / RFP (28 entités, 30 relations) [v1.1]
 │   ├── software-development.yaml     # Développement logiciel (21 entités, 23 relations) [v1.2]
 │   └── general.yaml                  # Générique : FAQ, certif, RSE, specs (26 entités, 24 relations) [v1.1]
@@ -791,7 +803,7 @@ graph-memory/
 │
 └── src/mcp_memory/           # Code source du service
     ├── __init__.py
-    ├── server.py             # Serveur MCP principal (FastMCP + outils)
+    ├── server.py             # Serveur MCP principal (MCPServer + 40 outils)
     ├── config.py             # Configuration centralisée (pydantic-settings)
     │
     ├── auth/                 # Authentification
@@ -894,8 +906,8 @@ docker compose exec mcp-memory env | grep -E "S3_|LLMAAS_|NEO4J_"
 
 ### Erreur 421 Misdirected Request (derrière un reverse proxy)
 
-- **Cause** : le SDK MCP v1.26+ active une protection DNS rebinding quand `host="127.0.0.1"` (défaut). Le `Host` header public est rejeté.
-- **Fix** : vérifiez que `FastMCP` est initialisé avec `host="0.0.0.0"` (ou `settings.mcp_server_host`) dans `server.py`. Depuis v1.2.2, c'est le comportement par défaut.
+- **Cause** : la protection DNS rebinding du SDK MCP peut rejeter le `Host` public lorsque l'application Streamable HTTP est configurée avec une adresse de boucle locale.
+- **Fix** : vérifiez que `MCP_SERVER_HOST=0.0.0.0`. `create_app()` transmet cette valeur à `MCPServer.streamable_http_app()` ; c'est la valeur par défaut du service.
 - **Vérification** : `curl -s -o /dev/null -w '%{http_code}' https://votre-domaine/mcp` → ne doit PAS retourner 421.
 
 ### Erreur 401 Unauthorized
@@ -932,4 +944,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v3.2.1 — Août 2026*
+*Graph Memory v3.2.1 — Septembre 2026*

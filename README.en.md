@@ -16,7 +16,7 @@ Built by **[Cloud Temple](https://www.cloud-temple.com)**.
 
 See **[CHANGELOG.md](CHANGELOG.md)** for the full version history (v0.5.0 → v3.2.1).
 
-**Latest**: v3.2.1 (August 30, 2026) — `storage_check` and `storage_cleanup` now detect S3 ontology objects orphaned after memory deletion, while preserving ontologies still referenced by existing memories and legacy memories without an `ontology_uri`. Fixes [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Previously: v3.2.0 (`source_path` exposed in Graph-first search).
+**Latest**: v3.2.1 (September 7, 2026) — migration to the official MCP SDK **2.1.1** while preserving the 40 tools and their contract, reproducible Python builds through `requirements.lock`, and corrected cleanup of orphaned S3 ontology objects. Fixes [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) and [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Previously: v3.2.0 (`source_path` exposed in Graph-first search).
 
 ---
 
@@ -51,8 +51,8 @@ Question (natural language)
 
 ## ✨ Features
 
-- **35 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
-- **Ontology-guided extraction** — 7 built-in ontologies (legal, cloud, managed-services, cloud-service-management, presales, general, software-development)
+- **40 MCP tools** exposed via Streamable HTTP (`/mcp` endpoint)
+- **Ontology-guided extraction** — 8 built-in ontologies (legal, cloud, managed-services, cloud-service-management, cloud-management-platform, presales, general, software-development)
 - **Graph-Guided RAG** — graph identifies relevant docs, then Qdrant searches chunks *within* those docs
 - **Interactive web UI** — vis-network graph visualization, filtering, ASK panel with Markdown rendering
 - **Complete CLI** — Click (scriptable) + interactive shell with autocompletion
@@ -79,7 +79,7 @@ Question (natural language)
 ┌─────────────────────────────────────────────────────┐
 │           Graph Memory Service (internal :8002)      │
 │  Auth → Logging → Static Files → MCP Streamable HTTP │
-│  35 MCP tools • 7 ontologies • Graph-Guided RAG      │
+│  40 MCP tools • 8 ontologies • Graph-Guided RAG      │
 └────────────┬───────────┬──────────┬─────────────────┘
              ▼           ▼          ▼
          Neo4j 5    S3 Storage   Qdrant
@@ -144,17 +144,24 @@ open http://localhost:8070/admin
 
 ### With Python (MCP SDK)
 
+Version 3.2.1 uses the official MCP SDK **2.1.1**. Reinstall CLI dependencies with
+`pip install -r requirements.txt -r requirements.lock`. Existing MCP clients,
+tool names and arguments remain supported. Docker uses the same Python
+dependency lock.
+
 ```python
-from mcp.client.streamable_http import streamablehttp_client
+import httpx2
+from mcp.client.streamable_http import streamable_http_client
 from mcp import ClientSession
 import base64
 
 async def example():
     headers = {"Authorization": "Bearer your_token"}
     
-    async with streamablehttp_client(
-        "http://localhost:8070/mcp", headers=headers
-    ) as (read, write, _):
+    async with (
+        httpx2.AsyncClient(headers=headers, timeout=httpx2.Timeout(30, read=900), trust_env=False) as http,
+        streamable_http_client("http://localhost:8070/mcp", http_client=http) as (read, write),
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             
@@ -214,6 +221,7 @@ Ontologies define the entity types and relation types the LLM should extract. Re
 | `cloud`            | 27       | 19        | Cloud infrastructure, product sheets     |
 | `managed-services` | 20       | 16        | Managed services, outsourcing            |
 | `cloud-service-management` | 39 | 38        | Managed cloud service operations         |
+| `cloud-management-platform` | 11 | 16       | Type-level CMP, tools and constraints     |
 | `presales`         | 28       | 30        | Pre-sales, RFP/RFI, proposals            |
 | `general`          | 24       | 22        | Generic: FAQ, certifications, CSR, specs |
 
@@ -225,7 +233,8 @@ Custom ontologies can be added as YAML files in `ONTOLOGIES/`.
 
 ```bash
 # Install CLI dependencies
-pip install httpx click rich prompt_toolkit mcp
+pip install -r requirements.txt -r requirements.lock
+pip install prompt_toolkit==3.0.53
 
 # Scriptable mode
 python scripts/mcp_cli.py health

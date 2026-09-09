@@ -1,13 +1,35 @@
 # Changelog
 
-## [3.2.1] - 2026-08-30
+## [Unreleased]
+
+### Ontologie Cloud Management Platform
+
+- Ajout de `cloud-management-platform` pour cartographier une CMP au niveau conceptuel : microservices, ressources métier, produits, outils sous-jacents, capacités et contraintes techniques.
+- Les contraintes sont des entités reliées par `PlatformTool -IMPOSES-> TechnicalConstraint -CONSTRAINS-> ToolCapability`, y compris lorsqu'un microservice repose sur plusieurs outils.
+- Les faits de déploiement et les instances concrètes (datacenter, région, environnement, host, VM nommée, adresse IP) sont explicitement exclus.
+
+## [3.2.1] - 2026-09-07
+
+### Migration vers MCP Python SDK 2
+
+- **SDK officiel `mcp==2.1.1`** : serveur `MCPServer`, version applicative annoncée à l'initialisation, endpoint `/mcp` et 40 outils métier conservés.
+- **CLI Python** : transport `streamable_http_client` avec `httpx2`, callback public de progression et lecture des résultats SDK 2 ; timeout de lecture de 15 minutes et désactivation des proxies d'environnement conservés.
+- **Console `/admin`** : appels via l'API publique `mcp.call_tool`, validation des arguments et suppression de l'accès au registre privé du SDK.
+- **Gros documents et lots** : limite HTTP fixée à trois fois les 50 Mio applicatifs et WAF aligné à 160 MB. Elle évite la limite SDK de 4 Mio et accepte au minimum deux documents au plafond dans `memory_ingest_batch_async` ; les lots plus nombreux restent bornés par la taille totale de leur enveloppe JSON.
+- **Dépendances figées** : `requirements.lock` inclut les dépendances transitives et l'outillage Python ; Docker l'installe sans `pip --upgrade` non borné et vérifie les imports SDK 2 au build. `setuptools` est relevé à une version corrigée et les dépendances de test sont épinglées séparément dans `requirements-test.lock`.
+- Migration interne : pas de changement des paramètres métier ni de migration des données. Les environnements exécutant la CLI Python doivent réinstaller les dépendances.
+- **Validation reproductible** : 11 tests ciblés passent sous Python 3.11/Docker (authentification, admin, injection du contexte, protocoles legacy/2026, notifications, uploads >4 Mio, lot multi-documents au-delà de l'ancienne limite, appels internes décorés, limite HTTP et isolation S3) ; le workflow GitHub Actions exécute la même commande avec les dépendances de test figées et construit l'image. Build sans cache réussi, schémas des 40 outils inchangés. Après renouvellement de la clé LLMaaS, 19 contrôles fonctionnels réels passent avec le CLI Go et le serveur SDK 2 : ingestion de 3 documents, extraction d'entités et relations, recherche graphe et vectorielle, déduplication locale/distante, remplacement explicite et cohérence S3/Neo4j/Qdrant.
+- **Réserve de recette locale** : les accès TLS/S3 présentent des délais intermittents, reproduits également avec le serveur SDK 1. Le nettoyage a dépassé le délai client de 120 secondes ; la suppression effective des ressources de test a été vérifiée séparément (aucun résidu S3, Neo4j ou Qdrant). La suite de recette globale n'a pas été rejouée.
 
 ### 🧹 Cleanup des ontologies S3 orphelines
 
 - **`storage_check`** ne considère plus automatiquement tous les objets contenant `_ontology_` comme légitimes : seules les ontologies encore référencées par une mémoire existante sont protégées.
-- **`storage_cleanup`** peut désormais détecter et supprimer les ontologies laissées sur S3 après la suppression d'une mémoire, y compris les copies obsolètes d'une ontologie.
+- **`storage_cleanup`** peut désormais détecter et supprimer les ontologies laissées sur S3 après la suppression d'une mémoire, ainsi que les copies obsolètes des mémoires récentes qui référencent explicitement leur `ontology_uri`.
 - **Compatibilité legacy** : les mémoires anciennes sans `ontology_uri` restent protégées par une correspondance stricte sur leur identifiant et leur nom d'ontologie.
+- **Isolation** : un `storage_check(memory_id=...)` ne retourne que les objets du préfixe S3 autorisé et ne divulgue plus les clés appartenant aux autres mémoires ; `s3_total_objects` désigne alors le total de ce périmètre.
 - Correctif de l'issue [#31](https://github.com/Cloud-Temple/graph-memory/issues/31), validé sur Docker local : 5 ontologies orphelines détectées puis supprimées, second contrôle à 0 orphelin.
+
+Cette release corrige également l'issue [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) sur la reproductibilité du build.
 
 ## [3.2.0] - 2026-06-04
 
