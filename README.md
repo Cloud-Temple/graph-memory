@@ -66,9 +66,9 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ## 📋 Changelog
 
-Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.2.1).
+Voir **[CHANGELOG.md](CHANGELOG.md)** pour l'historique complet des versions (v0.5.0 → v3.3.0).
 
-**Dernière version** : v3.2.1 (7 septembre 2026) — migration vers le SDK officiel MCP **2.1.1** avec conservation des 40 outils et de leur contrat, build Python reproductible via `requirements.lock`, et correction du nettoyage des ontologies S3 orphelines. Correctifs des issues [#30](https://github.com/Cloud-Temple/graph-memory/issues/30) et [#31](https://github.com/Cloud-Temple/graph-memory/issues/31). Précédemment : v3.2.0 (`source_path` exposé dans la recherche Graph-first).
+**Dernière version** : v3.3.0 (9 septembre 2026) — CLI Go autonome `graph-memory-ingest` pour l'ingestion massive, le suivi des jobs et l'évaluation d'ontologie, plus l'ontologie conceptuelle Cloud Management Platform. La v3.2.1 avait migré le serveur vers le SDK officiel MCP **2.1.1**.
 
 ---
 
@@ -154,6 +154,7 @@ Question en langage naturel
 ### CLI complète
 - **Mode Click** (scriptable) : `python scripts/mcp_cli.py memory list`
 - **Mode Shell** (interactif) : autocomplétion, historique, commandes contextuelles
+- **CLI Go autonome** : `graph-memory-ingest` pour scanner et ingérer des corpus par lots, avec TUI ou sortie JSON
 
 ### Sécurité
 - Authentification Bearer Token pour toutes les requêtes MCP
@@ -435,6 +436,22 @@ mcp> exit                          # Quitter
 | Télécharger backup | `backup download BACKUP_ID`     | `backup-download BACKUP_ID [--include-documents]` |
 | Supprimer backup   | `backup delete BACKUP_ID`       | `backup-delete BACKUP_ID`                         |
 | Restore fichier    | `backup restore-file PATH`      | `backup-restore-file PATH`                        |
+
+### Ingestion massive avec le CLI Go
+
+`graph-memory-ingest` est un binaire autonome pour scanner un dossier, dédupliquer
+les documents, soumettre des lots et suivre les jobs jusqu'à leur statut terminal.
+Il fonctionne avec Graph Memory standalone et Hivemind, en mode TUI ou JSON.
+
+```bash
+cd tools/graph-memory-ingest
+go build -o bin/graph-memory-ingest .
+./bin/graph-memory-ingest run --path ./docs --space ma-memoire --watch
+```
+
+La configuration utilise les flags, les variables `GRAPH_MEMORY_*` ou un fichier
+YAML. Le protocole, les statuts, les règles de déduplication et l'évaluation
+d'ontologie sont détaillés dans [`tools/graph-memory-ingest/README.md`](tools/graph-memory-ingest/README.md).
 
 ---
 
@@ -801,6 +818,9 @@ graph-memory/
 │       ├── display.py        # Affichage Rich (tables, panels, graphe)
 │       └── shell.py          # Shell interactif prompt_toolkit
 │
+├── tools/                    # Outils autonomes complémentaires
+│   └── graph-memory-ingest/  # CLI Go d'ingestion massive (TUI + automatisation)
+│
 └── src/mcp_memory/           # Code source du service
     ├── __init__.py
     ├── server.py             # Serveur MCP principal (MCPServer + 40 outils)
@@ -944,4 +964,4 @@ Développé par **[Cloud Temple](https://www.cloud-temple.com)**.
 
 ---
 
-*Graph Memory v3.2.1 — Septembre 2026*
+*Graph Memory v3.3.0 — Septembre 2026*

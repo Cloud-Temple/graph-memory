@@ -81,3 +81,6 @@ REFERENTIELS/
 /chantier/
 scripts/ingest_quoteflow.sh
 scripts/test_ontology.py
+
+# === Go Tooling ===
+tools/graph-memory-ingest/bin/
