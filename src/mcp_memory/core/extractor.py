@@ -8,6 +8,7 @@ les entités, relations et concepts à partir de texte.
 
 import sys
 import json
+import logging
 from typing import Optional, List
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -20,6 +21,9 @@ from .models import (
     EntityType, RelationType
 )
 from .ontology import Ontology, get_ontology_manager
+
+
+logger = logging.getLogger("mcp_memory.extractor")
 
 
 # Prompt d'extraction MINIMAL (fallback sans ontologie).
@@ -78,6 +82,7 @@ class ExtractorService:
         self._max_tokens = settings.llmaas_max_tokens
         self._temperature = settings.llmaas_temperature
         self._max_text_length = settings.extraction_max_text_length
+        self._debug = settings.mcp_server_debug
     
     @retry(
         stop=stop_after_attempt(3),
@@ -119,19 +124,30 @@ class ExtractorService:
                 # Note: response_format non supporté par LLMaaS Cloud Temple
             )
             
-            # Parser la réponse - DEBUG COMPLET
-            print(f"🔍 [Extractor] DEBUG response type: {type(response)}", file=sys.stderr)
-            print(f"🔍 [Extractor] DEBUG choices count: {len(response.choices)}", file=sys.stderr)
-            if response.choices:
-                print(f"🔍 [Extractor] DEBUG message: {response.choices[0].message}", file=sys.stderr)
-                print(f"🔍 [Extractor] DEBUG finish_reason: {response.choices[0].finish_reason}", file=sys.stderr)
+            # Debug payload details can include model output. Keep them behind
+            # the explicit server debug flag to avoid noisy production logs.
+            if self._debug:
+                logger.debug("[Extractor] response type: %s", type(response))
+                logger.debug("[Extractor] choices count: %s", len(response.choices))
+                if response.choices:
+                    logger.debug("[Extractor] message: %s", response.choices[0].message)
+                    logger.debug(
+                        "[Extractor] finish_reason: %s",
+                        response.choices[0].finish_reason,
+                    )
             
             content = response.choices[0].message.content
             if content is None:
-                print(f"⚠️ [Extractor] Réponse LLM vide - message complet: {response.choices[0].message}", file=sys.stderr)
+                print("⚠️ [Extractor] Réponse LLM vide", file=sys.stderr)
+                if self._debug:
+                    logger.debug(
+                        "[Extractor] empty LLM response message: %s",
+                        response.choices[0].message,
+                    )
                 return ExtractionResult(summary=None)
             
-            print(f"🔍 [Extractor] DEBUG content length: {len(content)}", file=sys.stderr)
+            if self._debug:
+                logger.debug("[Extractor] content length: %s", len(content))
             result = self._parse_extraction(content)
             
             print(f"✅ [Extractor] Extrait: {len(result.entities)} entités, {len(result.relations)} relations", file=sys.stderr)
