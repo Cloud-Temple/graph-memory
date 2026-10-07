@@ -2,6 +2,12 @@
 
 
 > 🇬🇧 [English version](README.en.md)
+
+Les agents du dépôt démarrent avec [AGENTS.md](AGENTS.md), les règles canoniques
+et la [configuration du dépôt](AGENTIC_RULES/project.config.yml).
+Le [contexte projet](DESIGN/INSTRUCTIONS_PROJET.md) précise la mémoire de
+travail existante et la coordination Mission.
+
 Service de mémoire persistante basé sur un **graphe de connaissances** pour les agents IA, implémenté avec le protocole [MCP (Model Context Protocol)](https://modelcontextprotocol.io/).
 
 Développé par **[Cloud Temple](https://www.cloud-temple.com)**.

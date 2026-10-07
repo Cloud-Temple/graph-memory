@@ -2,6 +2,11 @@
 
 > 🇫🇷 [Version française](README.md)
 
+Repository agents start from [AGENTS.md](AGENTS.md), the canonical rules and
+[repository configuration](AGENTIC_RULES/project.config.yml).
+[Project context](DESIGN/INSTRUCTIONS_PROJET.md) describes the existing
+working-memory attachment and Mission coordination.
+
 A persistent memory service based on a **knowledge graph** for AI agents, implementing the [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) over **Streamable HTTP**.
 
 Built by **[Cloud Temple](https://www.cloud-temple.com)**.

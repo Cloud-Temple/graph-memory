@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Développement
+
+- Installation des règles agentiques canoniques Cloud Temple avec provenance
+  et contrôle de conformité ; rattachement à l'espace de travail existant
+  `graph-mem` sur `my-live-memory` et contexte de coordination Mission.
+
 ## [3.3.0] - 2026-09-09
 
 ### CLI Go d'ingestion massive

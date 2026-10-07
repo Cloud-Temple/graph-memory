@@ -1,0 +1,51 @@
+# Valeurs propres à ce dépôt.
+#
+# Ce fichier est le seul de AGENTIC_RULES/ qui varie d'un projet à l'autre.
+# Il n'est pas comparé au corpus de référence par le contrôle de conformité.
+# Le copier en project.config.yml et le renseigner avant la première session.
+#
+# Trois états par champ, et un seul sens pour chacun :
+#   une valeur   le champ est renseigné, l'agent l'utilise
+#   disabled     le champ est volontairement inutilisé, l'agent l'ignore
+#   le marqueur  le champ n'a pas été traité, le contrôle de conformité échoue
+#
+# Ne jamais supprimer une clé pour faire passer le contrôle : il ne lit que les
+# valeurs, pas ces commentaires, mais une clé manquante reste une clé manquante.
+# Un champ absent que la génération de schéma déclarée ci-dessous connaissait est
+# un champ non traité, donc bloquant ; un champ venu d'une génération postérieure
+# est simplement absent et vaut disabled. MAIN_RULES.md fait foi sur ce point.
+
+schema_version: 2
+
+project:
+  # Nom court du dépôt, tel qu'il apparaît sur GitHub.
+  name: TO_FILL
+  # Langue publique établie du projet, par exemple fr ou en. Porter disabled
+  # si le projet n'en a pas : l'agent écrit alors dans la langue de l'utilisateur.
+  public_language: TO_FILL
+  # Document d'instructions propres à ce dépôt, chemin relatif à la racine.
+  # Il décrit le projet, jamais la méthode : voir MAIN_RULES.md pour ce qu'il
+  # a le droit de contenir. Porter disabled si le dépôt n'en a pas. Le contrôle
+  # de conformité échoue si le fichier désigné n'existe pas.
+  instructions_file: TO_FILL
+
+memory:
+  live:
+    # Nom du serveur MCP Live Memory tel qu'il est déclaré côté client.
+    # L'espace est cherché sur tous les serveurs configurés, pas seulement
+    # celui-ci : voir « Trouver l'espace du projet » dans PROJECT_RULES.md.
+    # Cette clé désigne le serveur où créer l'espace s'il n'existe nulle part,
+    # et l'agent la corrige si l'espace vit ailleurs.
+    server: TO_FILL
+    # Espace mémoire du projet, casse exacte.
+    space_id: TO_FILL
+  graph:
+    # Index sémantique durable. Porter disabled sur les deux clés si le projet
+    # ne l'utilise pas ; ne pas retirer la section Graph Memory des règles.
+    server: disabled
+    memory_id: disabled
+
+review:
+  # Fournisseur du relecteur indépendant : claude, codex ou llmaas.
+  # Les modèles correspondants sont fixés dans AGENTIC_RULES/REVIEWERS.md.
+  reviewer_provider: TO_FILL

@@ -1,0 +1,26 @@
+# Contrôle de conformité du corpus de règles agentiques.
+#
+# À copier dans .github/workflows/ du dépôt consommateur. Le vérificateur est
+# vendoré avec le corpus, sous AGENTIC_RULES/ : le contrôle ne demande aucun
+# accès sortant et son empreinte est elle-même couverte par la provenance.
+name: Conformité des règles agentiques
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Une fois par semaine, comparaison à la source pour repérer un dépôt
+    # resté sur un tag ancien. Séparée du contrôle de PR, qui reste hors ligne.
+    - cron: "0 6 * * 1"
+
+jobs:
+  conformite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Contrôle local
+        run: ./AGENTIC_RULES/agentic-rules.sh check .
+      - name: Comparaison à la source
+        if: github.event_name == 'schedule'
+        run: ./AGENTIC_RULES/agentic-rules.sh check . --remote

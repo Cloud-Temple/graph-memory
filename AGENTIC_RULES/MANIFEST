@@ -1,0 +1,17 @@
+# Charge utile distribuée aux dépôts consommateurs.
+# Une ligne par chemin, relatif à la racine du dépôt.
+# Ces chemins sont comparés à l'octet près par le contrôle de conformité, et
+# AGENTIC_RULES/ ne doit contenir rien d'autre que ces fichiers, la provenance
+# et project.config.yml, qui porte les valeurs propres à chaque dépôt.
+AGENTS.md
+CLAUDE.md
+QWEN.md
+AGENTIC_RULES/MANIFEST
+AGENTIC_RULES/agentic-rules.sh
+AGENTIC_RULES/MAIN_RULES.md
+AGENTIC_RULES/PROJECT_RULES.md
+AGENTIC_RULES/REVIEWERS.md
+AGENTIC_RULES/WORKFLOW_ENGINEERING.md
+AGENTIC_RULES/WORKFLOW_GIT.md
+AGENTIC_RULES/WORKFLOW_GIT_EPIC.md
+AGENTIC_RULES/project.config.example.yml
