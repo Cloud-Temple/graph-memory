@@ -1,5 +1,11 @@
 # 🧠 Graph Memory — MCP Knowledge Graph Service
 
+> [!IMPORTANT]
+> **Projet archivé.** Graph Memory n'est plus maintenu.
+>
+> Le développement se poursuit dans **[Hivemind](https://github.com/Lesur-ai/hivemind)**. Retrouvez sur ce dépôt la documentation à jour, les contributions et les signalements de problèmes.
+>
+> Ce dépôt et la documentation ci-dessous sont conservés à titre historique.
 
 > 🇬🇧 [English version](README.en.md)
 Service de mémoire persistante basé sur un **graphe de connaissances** pour les agents IA, implémenté avec le protocole [MCP (Model Context Protocol)](https://modelcontextprotocol.io/).
